@@ -1,40 +1,99 @@
-# Telephony Lead Ingestion
+# FreeSWITCH Telephony System - EKS/Kubernetes Deployment
 
-A robust, provider-agnostic telephony infrastructure template designed to intercept incoming calls, play a custom greeting, and forward the caller details to an external registry system as a JSON payload.
+This branch contains the deployment manifests and source code for running the FreeSWITCH telephony system on a Kubernetes cluster (such as Amazon EKS). It is designed to scale horizontally and deploy all stateful and stateless components inside Kubernetes pods.
 
-## Architecture Overview
+---
 
-This project consists of two main components:
-1. **The Telephony Engine (Asterisk/FreePBX)**: Hosted on AWS EC2, provisioned automatically via Terraform. Handles the SIP connection from your provider (like Twilio), answers the call, plays a message, and emits a `Hangup` event over the Asterisk Manager Interface (AMI).
-2. **The Lead Service (Java Spring Boot)**: Hosted as a Docker container. Connects directly to the Asterisk AMI, listens for `Hangup` events, extracts the caller ID, saves the lead to a local Postgres database, and forwards the data to your chosen API endpoint.
+## 1. Architecture Flow
 
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant Twilio as SIP Provider (Twilio)
-    participant PBX as EC2 (Asterisk PBX)
-    participant LeadService as Docker (Lead Service)
-    participant DB as Postgres (Local DB)
-    participant Registry as External Registry API
-
-    Caller->>Twilio: Dials Phone Number
-    Twilio->>PBX: Forwards call via SIP Trunk
-    PBX->>Caller: Answers & Plays Greeting
-    PBX->>Caller: Hangs Up
-    PBX-->>LeadService: Emits AMI "Hangup" Event
-    LeadService->>DB: Stores Lead locally
-    LeadService->>Registry: POSTs JSON Payload
-    Registry-->>LeadService: 200 OK
+```
+                      SIP UDP 5060                           Internal Service Route
+  [ Twilio Trunk ] ────────────────> [ Kong Ingress Proxy ] ─────────────────────────> [ FreeSWITCH Pod ]
+                                       (UDP Routing)                                          │
+                                                                                              │ Outbound ESL
+                                                                                              ▼
+  [ Lead Registry ] <── [ Lead-Service Pod ] <── [ Kafka Broker ] <── [ Event-Publisher Pod ] ┘
 ```
 
-## Features
-- **Infrastructure as Code**: The entire Asterisk PBX is deployed and configured using Terraform. It automatically handles NAT, security groups, SIP transport configurations, and AMI bindings.
-- **Provider Agnostic**: Easily swap out Twilio for any other SIP provider. The Terraform variables allow you to configure custom SIP domain URIs and IP allowlists.
-- **Resilient**: The `lead-service` will auto-reconnect to the PBX if the connection drops. If the external registry API goes down, the lead is still safely captured in the local Postgres database for future manual/automated recovery.
-- **Admin Ready**: Comes with pgAdmin pre-configured to easily view your captured leads directly in the browser.
+1. **Kong Ingress Controller**: Handles incoming SIP traffic on UDP port `5060` and routes it to the active FreeSWITCH pods.
+2. **FreeSWITCH Pod**: Plays the welcome greeting and bridges the socket to the Event-Publisher.
+3. **Event-Publisher**: Connects to the FreeSWITCH outbound socket, receives events, and publishes them to the Kafka broker.
+4. **Lead-Service**: Consumes call hangup events from Kafka, logs them to PostgreSQL, and posts the lead payload to the external lead registry.
 
-## Getting Started
+---
 
-Ready to deploy your own telephony infrastructure?
+## 2. Directory Structure
 
-👉 **Head over to the [Setup Guide](infra/SETUP.md)** to provision the cloud infrastructure and start the Docker services.
+```
+.
+├── infra/                      # Kubernetes deployment manifests
+│   ├── apps/                   # Java services (event-publisher, lead-service)
+│   ├── freeswitch/             # FreeSWITCH configmaps, deployments, and Dockerfile
+│   ├── kafka/                  # Kafka cluster & topic definitions
+│   ├── kong/                   # UDP ingress mapping for Kong
+│   └── postgres/               # Postgres database and pgAdmin deployment
+├── service/                    # Backend services source code
+│   ├── event-publisher/        # Spring Boot ESL event-to-Kafka publisher
+│   └── lead-service/           # Spring Boot Kafka-to-Registry lead ingestion service
+├── .gitignore                  # Git ignore rules for Java/Kubernetes
+└── README.md                   # This setup guide
+```
+
+---
+
+## 3. Deployment Steps
+
+### Step 1: Deploy Infrastructure
+1. Apply database manifests:
+   ```bash
+   kubectl apply -f infra/postgres/
+   ```
+2. Apply Kafka broker manifests (assumes Strimzi Operator is installed):
+   ```bash
+   kubectl apply -f infra/kafka/
+   ```
+
+### Step 2: Build & Deploy FreeSWITCH
+1. Navigate to the FreeSWITCH deployment directory:
+   ```bash
+   cd infra/freeswitch
+   ```
+2. Build the FreeSWITCH Docker image (baking in the custom greeting):
+   ```bash
+   docker build -t your-registry/freeswitch:latest .
+   docker push your-registry/freeswitch:latest
+   ```
+3. Deploy FreeSWITCH configurations and deployment resources:
+   ```bash
+   kubectl apply -f freeswitch-configmap.yaml
+   kubectl apply -f freeswitch-deployment.yaml
+   kubectl apply -f freeswitch-service.yaml
+   ```
+
+### Step 3: Configure Ingress (Kong UDP Routing)
+1. Configure UDP routing for SIP signaling:
+   ```bash
+   kubectl apply -f infra/kong/udp-ingress.yaml
+   ```
+
+### Step 4: Build & Deploy Java Backend Services
+1. Build `event-publisher` and `lead-service` images:
+   ```bash
+   docker build -t your-registry/event-publisher:latest ./service/event-publisher
+   docker build -t your-registry/lead-service:latest ./service/lead-service
+   ```
+2. Deploy manifests:
+   ```bash
+   kubectl apply -f infra/apps/
+   ```
+
+---
+
+## 4. Verification & Testing
+
+1. Check that all pods are running and healthy:
+   ```bash
+   kubectl get pods -A
+   ```
+2. Initiate a call to your Twilio phone number mapped to the Kong UDP LoadBalancer IP.
+3. Check the lead service database or logs to verify that the call events were successfully processed.

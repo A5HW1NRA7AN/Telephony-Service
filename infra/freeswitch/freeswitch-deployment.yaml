@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: freeswitch
+  namespace: default
+  labels:
+    app: freeswitch
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: freeswitch
+  template:
+    metadata:
+      labels:
+        app: freeswitch
+    spec:
+      containers:
+      - name: freeswitch
+        image: freeswitch-custom:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+            - SYS_NICE
+            - SYS_RAWIO
+        ports:
+        - name: sip-udp
+          containerPort: 5060
+          protocol: UDP
+        - name: sip-tcp
+          containerPort: 5060
+          protocol: TCP
+        - name: esl
+          containerPort: 8021
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/freeswitch/freeswitch.xml
+          subPath: freeswitch.xml
+      volumes:
+      - name: config-volume
+        configMap:
+          name: freeswitch-config
