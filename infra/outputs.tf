@@ -1,24 +1,24 @@
-output "asterisk_public_ip" {
-  description = "Public IP of the Asterisk/FreePBX server"
-  value       = aws_eip.asterisk_eip.public_ip
+output "region" {
+  description = "AWS region"
+  value       = var.aws_region
 }
 
-output "ssh_command" {
-  description = "SSH command to access the server"
-  value       = "ssh -i asterisk-key.pem admin@${aws_eip.asterisk_eip.public_ip}"
+output "bastion_public_ip" {
+  description = "The public IP of the Bastion jump host"
+  value       = aws_instance.bastion.public_ip
 }
 
-output "freepbx_url" {
-  description = "FreePBX web admin URL"
-  value       = "http://${aws_eip.asterisk_eip.public_ip}"
+output "proxy_public_ip" {
+  description = "The static IP for Twilio to send SIP/RTP traffic to and to access pgAdmin/APIs"
+  value       = aws_eip.proxy_eip.public_ip
 }
 
-output "ami_host" {
-  description = "AMI host for lead-service application.properties"
-  value       = aws_eip.asterisk_eip.public_ip
+output "freeswitch_private_ip" {
+  description = "The private IP of the FreeSWITCH stack instance"
+  value       = aws_instance.freeswitch.private_ip
 }
 
-output "ami_port" {
-  description = "AMI port (default)"
-  value       = 5038
+output "ssh_bastion_tunnel_cmd" {
+  description = "SSH proxy jump command to connect to the private FreeSWITCH instance"
+  value       = "ssh -i \${path.module}/freeswitch-key.pem -J admin@\${aws_instance.bastion.public_ip} admin@\${aws_instance.freeswitch.private_ip}"
 }

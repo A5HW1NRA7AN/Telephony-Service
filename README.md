@@ -1,40 +1,112 @@
-# Telephony Lead Ingestion
+# FreeSWITCH Telephony System - Standalone EC2 Deployment
 
-A robust, provider-agnostic telephony infrastructure template designed to intercept incoming calls, play a custom greeting, and forward the caller details to an external registry system as a JSON payload.
+This branch contains the deployment files and source code for running the FreeSWITCH telephony system on a secure, standalone AWS EC2 stack. It utilizes a split-network topology with a public-facing Bastion host, a public-facing Nginx/SIP Proxy host, and a private FreeSWITCH application stack host running inside a custom VPC.
 
-## Architecture Overview
+---
 
-This project consists of two main components:
-1. **The Telephony Engine (Asterisk/FreePBX)**: Hosted on AWS EC2, provisioned automatically via Terraform. Handles the SIP connection from your provider (like Twilio), answers the call, plays a message, and emits a `Hangup` event over the Asterisk Manager Interface (AMI).
-2. **The Lead Service (Java Spring Boot)**: Hosted as a Docker container. Connects directly to the Asterisk AMI, listens for `Hangup` events, extracts the caller ID, saves the lead to a local Postgres database, and forwards the data to your chosen API endpoint.
+## 1. Network & Deployment Topology
 
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant Twilio as SIP Provider (Twilio)
-    participant PBX as EC2 (Asterisk PBX)
-    participant LeadService as Docker (Lead Service)
-    participant DB as Postgres (Local DB)
-    participant Registry as External Registry API
-
-    Caller->>Twilio: Dials Phone Number
-    Twilio->>PBX: Forwards call via SIP Trunk
-    PBX->>Caller: Answers & Plays Greeting
-    PBX->>Caller: Hangs Up
-    PBX-->>LeadService: Emits AMI "Hangup" Event
-    LeadService->>DB: Stores Lead locally
-    LeadService->>Registry: POSTs JSON Payload
-    Registry-->>LeadService: 200 OK
+```
+                  SIP INVITE / UDP 5060                        NAT / DNAT Forwarding
+ [ Twilio Trunk ] ──────────────────────> [ Nginx / SIP Proxy ] ────────────────────> [ FreeSWITCH (Private) ]
+                                             (18.176.226.249)                            (10.0.1.143)
+                                                                                               │
+                                                                                               │ Outbound ESL
+                                                                                               ▼
+ [ Lead Registry ] <─── [ Lead-Service ] <─── [ Kafka Broker ] <─── [ Event-Publisher ] ◄─────┘
+                         (PostgreSQL)
 ```
 
-## Features
-- **Infrastructure as Code**: The entire Asterisk PBX is deployed and configured using Terraform. It automatically handles NAT, security groups, SIP transport configurations, and AMI bindings.
-- **Provider Agnostic**: Easily swap out Twilio for any other SIP provider. The Terraform variables allow you to configure custom SIP domain URIs and IP allowlists.
-- **Resilient**: The `lead-service` will auto-reconnect to the PBX if the connection drops. If the external registry API goes down, the lead is still safely captured in the local Postgres database for future manual/automated recovery.
-- **Admin Ready**: Comes with pgAdmin pre-configured to easily view your captured leads directly in the browser.
+1. **Bastion Jump Host** (Public Subnet): Strictly handles secure SSH administration.
+2. **Nginx / SIP Proxy** (Public Subnet): Exposes HTTP default routes for reverse-proxying web consoles, and implements `iptables` DNAT rules to route SIP (5060) and RTP (16384-32768) traffic into the private subnet.
+3. **FreeSWITCH Host** (Private Subnet): Runs the core FreeSWITCH instance alongside PostgreSQL, pgAdmin, Kafka, Zookeeper, Event-Publisher, and Lead-Service in a host-network-bridged Docker Compose stack.
 
-## Getting Started
+---
 
-Ready to deploy your own telephony infrastructure?
+## 2. Directory Structure
 
-👉 **Head over to the [Setup Guide](infra/SETUP.md)** to provision the cloud infrastructure and start the Docker services.
+```
+.
+├── config/                     # FreeSWITCH config files
+│   └── freeswitch.xml          # Core dialplan, modules, and Sofia settings
+├── infra/                      # Terraform & Deployment configurations
+│   ├── copy_files.sh           # Syncs code files to the remote private host
+│   ├── restart_services.sh     # Restarts remote Docker containers
+│   ├── run_call.sh             # Triggers a local loopback call for testing
+│   ├── run_db_query.sh         # Queries the remote database
+│   ├── instances.tf            # Provisions EC2 instances and Nginx/NAT userdata
+│   ├── main.tf                 # VPC definition and provider settings
+│   ├── outputs.tf              # Outputs IPs and SSH commands
+│   ├── security.tf             # Generates key pair and declares Security Groups
+│   └── variables.tf            # Configurable Terraform inputs
+├── service/                    # Backend services source code
+│   ├── event-publisher/        # Spring Boot ESL event-to-Kafka publisher
+│   └── lead-service/           # Spring Boot Kafka-to-Registry lead ingestion service
+├── docker-compose.yml          # Runs backend services on the private host
+├── .env.example                # Example environment file template
+├── .gitignore                  # Git ignore rules for Java/Terraform
+└── README.md                   # This setup & architecture guide
+```
+
+---
+
+## 3. Deployment Steps
+
+### Step 1: Provision AWS Infrastructure via Terraform
+1. Navigate to the Terraform directory:
+   ```bash
+   cd infra
+   ```
+2. Initialize and apply the configurations:
+   ```bash
+   terraform init
+   terraform apply -auto-approve
+   ```
+3. Record the outputs:
+   - `proxy_public_ip` (Proxy Gateway Elastic IP)
+   - `bastion_public_ip` (SSH Jump Host)
+   - `freeswitch_private_ip` (Private Server IP)
+   - `freeswitch-key.pem` (Automatically generated private key)
+
+### Step 2: Configure Twilio Elastic SIP Trunking
+1. Set up a Twilio Elastic SIP Trunk pointing to your `proxy_public_ip` as the Origination URI:
+   `sip:<proxy_public_ip>:5060`
+2. Bind a public phone number to the trunk (e.g. `+13613101995`).
+3. Set Termination SIP URI to `coss-freeswitch.pstn.twilio.com` whitelisting the `proxy_public_ip`.
+
+### Step 3: Deploy Services on the Private Host
+1. Copy the code files to the private server via the helper script:
+   ```bash
+   ./copy_files.sh
+   ```
+2. SSH into the private instance:
+   ```bash
+   ssh -i freeswitch-key.pem -J admin@<bastion_public_ip> admin@<freeswitch_private_ip>
+   ```
+3. Navigate to `/home/admin/freeswitch` and create `.env` using `.env.example` as a template:
+   ```bash
+   cp .env.example .env
+   nano .env # Set your database password, allowed lead context, and lead registry URL
+   ```
+4. Start the stack:
+   ```bash
+   docker compose up -d --build
+   ```
+
+---
+
+## 4. Verification & Testing
+
+1. Check that all 7 containers are healthy:
+   ```bash
+   docker ps --format "table {{.Names}}\t{{.Status}}"
+   ```
+2. Watch the FreeSWITCH CLI:
+   ```bash
+   docker exec -it telephony-freeswitch fs_cli -p CluSt3r@Esl#2026!
+   ```
+3. Make an inbound test call by dialing `+13613101995`. Verify the greeting sound plays and that the Event-Publisher receives the call, publishes it to Kafka, and the Ingestion Service posts it to the lead registry.
+4. Run the database query tool locally to verify that the lead has been successfully logged:
+   ```bash
+   ./run_db_query.sh
+   ```

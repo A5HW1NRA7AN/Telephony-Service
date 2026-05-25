@@ -31,7 +31,6 @@ public class HangupLeadIngestService {
     private final ObjectMapper objectMapper;
     private final LeadDispatchService leadDispatchService;
 
-    @Transactional
     public void onAmiMessage(Map<String, String> message) {
         if (!EVENT_HANGUP.equalsIgnoreCase(message.getOrDefault("Event", ""))) {
             return;

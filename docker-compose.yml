@@ -1,53 +1,129 @@
-services:
+version: '3.8'
 
+services:
   postgres:
     image: postgres:16-alpine
+    container_name: telephony-postgres
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lead_db}
       POSTGRES_USER: ${POSTGRES_USER:-lead_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lead_password}
-    ports:
-      - "5433:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lead_user} -d ${POSTGRES_DB:-lead_db}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - telephony-net
+    restart: always
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: telephony-pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_LISTEN_PORT: 80
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - telephony-net
+    depends_on:
+      - postgres
+    restart: always
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: telephony-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - telephony-net
+    restart: always
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: telephony-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - telephony-net
+    depends_on:
+      - zookeeper
+    restart: always
+
+  event-publisher:
+    build:
+      context: ./service/event-publisher
+      dockerfile: Dockerfile
+    container_name: telephony-event-publisher
+    ports:
+      - "8084:8084" # ESL Outbound Socket port
+      - "8081:8080" # Management HTTP port
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: telephony-call-events
+    networks:
+      - telephony-net
+    depends_on:
+      - kafka
+    restart: always
 
   lead-service:
     build:
-      context: ./service
+      context: ./service/lead-service
       dockerfile: Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
+    container_name: telephony-lead-service
     ports:
-      - "8080:8080"
+      - "8080:8080" # Exposed for Nginx proxy routing
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-lead_db}
       DB_USER: ${POSTGRES_USER:-lead_user}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-lead_password}
-      AMI_ENABLED: ${AMI_ENABLED:-false}
-      AMI_HOST: ${AMI_HOST:-127.0.0.1}
-      AMI_PORT: ${AMI_PORT:-5038}
-      AMI_USERNAME: ${AMI_USERNAME:-lead-ami}
-      AMI_SECRET: ${AMI_SECRET:-changeme}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_ENABLED: "true"
+      AMI_ENABLED: "false"
       LEAD_CONTEXT: ${LEAD_CONTEXT:-from-missed-call}
-      LEAD_REGISTRY_URL: ${LEAD_REGISTRY_URL:-}
-      LEAD_REGISTRY_API_KEY_HEADER: ${LEAD_REGISTRY_API_KEY_HEADER:-}
-      LEAD_REGISTRY_API_KEY_VALUE: ${LEAD_REGISTRY_API_KEY_VALUE:-}
-  pgadmin:
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
-    ports:
-      - "5050:80"
+      LEAD_REGISTRY_URL: ${LEAD_REGISTRY_URL}
+      LEAD_REGISTRY_API_KEY_HEADER: ${LEAD_REGISTRY_API_KEY_HEADER}
+      LEAD_REGISTRY_API_KEY_VALUE: ${LEAD_REGISTRY_API_KEY_VALUE}
+    networks:
+      - telephony-net
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
+      - kafka
+    restart: always
+
+  freeswitch:
+    build:
+      context: ./infra/freeswitch # Wait! EKS Dockerfile is now in infra/freeswitch
+      dockerfile: Dockerfile
+    container_name: telephony-freeswitch
+    network_mode: "host"
+    environment:
+      - EXTERNAL_IP=${EXTERNAL_IP}
+    volumes:
+      - ./config/freeswitch.xml:/etc/freeswitch/freeswitch.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "fs_cli -p CluSt3r@Esl#2026! -x status | grep -q ^UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: always
 
 volumes:
-  pgdata:
+  postgres_data:
+  pgadmin_data:
+
+networks:
+  telephony-net:
+    driver: bridge
