@@ -20,5 +20,5 @@ output "freeswitch_private_ip" {
 
 output "ssh_bastion_tunnel_cmd" {
   description = "SSH proxy jump command to connect to the private FreeSWITCH instance"
-  value       = "ssh -i \${path.module}/freeswitch-key.pem -J admin@\${aws_instance.bastion.public_ip} admin@\${aws_instance.freeswitch.private_ip}"
+  value       = "ssh -i ./freeswitch-key.pem -J admin@${aws_instance.bastion.public_ip} admin@${aws_instance.freeswitch.private_ip}"
 }
