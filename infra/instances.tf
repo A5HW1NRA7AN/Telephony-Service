@@ -30,6 +30,10 @@ resource "aws_instance" "bastion" {
   tags = {
     Name = "${var.cluster_name}-bastion"
   }
+
+  lifecycle {
+    ignore_changes = [key_name, associate_public_ip_address]
+  }
 }
 
 # 2. Private FreeSWITCH Server (Private Subnet)
@@ -71,6 +75,10 @@ USERDATA
 
   tags = {
     Name = "${var.cluster_name}-server"
+  }
+
+  lifecycle {
+    ignore_changes = [key_name]
   }
 }
 
@@ -150,6 +158,10 @@ USERDATA
 
   tags = {
     Name = "${var.cluster_name}-proxy"
+  }
+
+  lifecycle {
+    ignore_changes = [key_name, associate_public_ip_address]
   }
 }
 
