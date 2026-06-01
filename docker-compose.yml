@@ -79,6 +79,7 @@ services:
     restart: always
 
   lead-service:
+    image: ${ECR_REGISTRY:-379220350808.dkr.ecr.ap-northeast-1.amazonaws.com}/${ECR_REPOSITORY_LEAD_SERVICE:-freeswitch-lead-service}:${IMAGE_TAG:-latest}
     build:
       context: ./service/lead-service
       dockerfile: Dockerfile
