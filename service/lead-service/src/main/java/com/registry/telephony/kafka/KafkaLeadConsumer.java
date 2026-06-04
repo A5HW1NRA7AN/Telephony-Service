@@ -39,19 +39,19 @@ public class KafkaLeadConsumer {
 
             log.info("Processing CALL_HANGUP event for uniqueId: {}", payload.getUniqueId());
 
-            // Map Kafka payload to AMI-compatible structure for the ingest service
-            Map<String, String> amiMessage = new HashMap<>();
-            amiMessage.put("Event", "Hangup");
-            amiMessage.put("Context", payload.getContext());
-            amiMessage.put("Uniqueid", payload.getUniqueId());
-            amiMessage.put("Linkedid", payload.getUniqueId());
-            amiMessage.put("CallerIDNum", payload.getCallerNumber());
-            amiMessage.put("ConnectedLineNum", payload.getCallerNumber());
+            // Map Kafka payload to stack-agnostic structure for the ingest service
+            Map<String, String> eventData = new HashMap<>();
+            eventData.put("Event", "Hangup");
+            eventData.put("Context", payload.getContext());
+            eventData.put("Uniqueid", payload.getUniqueId());
+            eventData.put("Linkedid", payload.getUniqueId());
+            eventData.put("CallerIDNum", payload.getCallerNumber());
+            eventData.put("ConnectedLineNum", payload.getCallerNumber());
             
             // Map destination number
             String called = payload.getCalledNumber();
-            amiMessage.put("Exten", called != null ? called : "");
-            amiMessage.put("DNID", called != null ? called : "");
+            eventData.put("Exten", called != null ? called : "");
+            eventData.put("DNID", called != null ? called : "");
 
             if (payload.getRawHeaders() != null) {
                 // FreeSWITCH variables for call duration
@@ -59,20 +59,20 @@ public class KafkaLeadConsumer {
                 String billsec = payload.getRawHeaders().get("variable_billsec");
                 
                 if (duration != null) {
-                    amiMessage.put("Duration", duration);
+                    eventData.put("Duration", duration);
                 }
                 if (billsec != null) {
-                    amiMessage.put("BillableSeconds", billsec);
+                    eventData.put("BillableSeconds", billsec);
                 }
                 
                 // Read context from channel headers if not populated
                 String channelContext = payload.getRawHeaders().get("Channel-Context");
                 if (channelContext != null && (payload.getContext() == null || payload.getContext().isBlank())) {
-                    amiMessage.put("Context", channelContext);
+                    eventData.put("Context", channelContext);
                 }
             }
 
-            hangupLeadIngestService.onAmiMessage(amiMessage);
+            hangupLeadIngestService.onCallEvent(eventData);
             log.info("Successfully dispatched hangup call event for uniqueId: {}", payload.getUniqueId());
 
         } catch (Exception e) {
