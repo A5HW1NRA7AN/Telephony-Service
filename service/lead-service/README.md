@@ -1,47 +1,48 @@
-# Lead Service — Java Source
+# Lead Service - Java Application
 
-Spring Boot microservice that connects to Asterisk/FreePBX via AMI and captures missed-call leads.
+Spring Boot microservice that consumes call event messages from Apache Kafka, filters and normalizes the call logs, and registers qualified leads with the external Lead Registry database.
 
 ## Local development (without Docker)
 
-**Prerequisites:** JDK 17, Maven 3.9+, PostgreSQL
+**Prerequisites:** JDK 17, Maven 3.9+, PostgreSQL, and a running Apache Kafka broker.
 
+1. Configure connection properties or environment variables in `src/main/resources/application.properties`.
+2. Start the application:
+   ```bash
+   cd service/lead-service
+   mvn spring-boot:run
+   ```
+
+Override any configuration via environment variables:
 ```bash
-cd service/
-mvn spring-boot:run
-```
-
-The service starts with AMI **disabled** by default — it will connect to Postgres and be ready for when you enable AMI.
-
-Override any config via environment variables:
-
-```bash
-AMI_ENABLED=true AMI_HOST=<your-pbx-ip> mvn spring-boot:run
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092 DB_URL=jdbc:postgresql://localhost:5432/lead_db mvn spring-boot:run
 ```
 
 ## Running tests
 
+To run the unit and integration tests:
 ```bash
 mvn test
 ```
 
 ## Building the JAR
 
+To compile the code and build the executable JAR:
 ```bash
 mvn package -DskipTests
 java -jar target/lead-telephony-service-0.0.1-SNAPSHOT.jar
 ```
 
-## Project structure
+## Project Structure
 
 ```
 src/main/java/com/registry/telephony/
-├── TelephonyServiceApplication.java   ← Entry point
-├── config/                            ← Properties + Spring beans
-├── ami/                               ← AMI TCP client + message parser
-├── handlers/                          ← Hangup → lead ingest logic
-├── job/                               ← Async dispatch + retry sweeper
-└── persistence/                       ← JPA entity + repository
+├── TelephonyServiceApplication.java   - Application entry point
+├── config/                            - Properties mappings and Spring configuration beans
+├── handlers/                          - Lead ingestion and business logic handlers
+├── job/                               - Retry scheduler and sweep jobs for failed lead posts
+├── kafka/                             - Kafka consumers and serialization configs
+└── persistence/                       - JPA entities and repositories (telephony_call_lead_ingest_log)
 ```
 
-See the root [README](../README.md) for architecture details and the full setup guide.
+See the root README for architecture details and the complete CI/CD setup guide.

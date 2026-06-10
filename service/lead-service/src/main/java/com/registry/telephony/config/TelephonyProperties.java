@@ -11,23 +11,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 public class TelephonyProperties {
 
-    private final Ami ami = new Ami();
     private final LeadRegistry leadRegistry = new LeadRegistry();
     private final Dispatch dispatch = new Dispatch();
-
-    @Getter
-    @Setter
-    public static class Ami {
-        private boolean enabled = false;
-        private String host = "127.0.0.1";
-        private int port = 5038;
-        private String username = "";
-        private String secret = "";
-        private long reconnectInitialMs = 2000;
-        private long reconnectMaxMs = 60000;
-        private int readTimeoutMs = 120000;
-        private String eventMask = "call,system,user";
-    }
 
     @Getter
     @Setter
