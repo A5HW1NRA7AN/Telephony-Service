@@ -1,24 +1,43 @@
 # FreeSWITCH Telephony System - Standalone EC2 Deployment
 
-This branch contains the deployment files and source code for running the FreeSWITCH telephony system on a secure, standalone AWS EC2 stack. It utilizes a split-network topology with a public-facing Bastion host, a public-facing Nginx/SIP Proxy host, and a private FreeSWITCH application stack host running inside a custom VPC.
+This branch contains the deployment configuration and source code for running the FreeSWITCH telephony system on a secure, standalone AWS EC2 stack. It utilizes a split-network topology with a public-facing Bastion host, a public-facing Nginx/SIP Proxy host, and a private FreeSWITCH application stack host running inside a custom VPC.
 
 ---
 
-## 1. Network & Deployment Topology
+## 1. Runtime Flow and Architecture
 
-```
-                  SIP INVITE / UDP 5060                        NAT / DNAT Forwarding
- [ Twilio Trunk ] ──────────────────────> [ Nginx / SIP Proxy ] ────────────────────> [ FreeSWITCH (Private) ]
-                                             (18.176.226.249)                            (10.0.1.143)
-                                                                                               │
-                                                                                               │ Outbound ESL
-                                                                                               ▼
- [ Lead Registry ] <─── [ Lead-Service ] <─── [ Kafka Broker ] <─── [ Event-Publisher ] ◄─────┘
-                         (PostgreSQL)
+The sequence below details the flow of an inbound call, how events are parsed, and how leads are normalized and dispatched:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Twilio as Twilio Trunk
+    participant Proxy as Nginx/SIP Proxy<br/>(Public IP)
+    participant FS as FreeSWITCH Engine<br/>(Private IP)
+    participant EP as Event-Publisher<br/>(Spring Boot ESL)
+    participant Kafka as Kafka Broker
+    participant LS as Lead-Service<br/>(Spring Boot JVM)
+    participant DB as PostgreSQL Database
+    participant Registry as Lead Registry<br/>(External API)
+
+    Twilio->>Proxy: Inbound SIP INVITE / Call Connection
+    Note over Proxy: DNAT Port Forwarding via iptables
+    Proxy->>FS: Route SIP Signalling (UDP 5060) & RTP Media (16384-32768)
+    Note over FS: Call processed (greeting.wav played, hangup triggered)
+    FS->>EP: Event Outbound Socket Connection (ESL on Port 8084)
+    EP->>FS: Listen for CHANNEL_HANGUP & CHANNEL_HANGUP_COMPLETE
+    FS-->>EP: Emit call hangup event data
+    EP->>Kafka: Publish event to 'telephony-call-events' topic
+    LS->>Kafka: Consume event from topic
+    LS->>DB: Save raw event & insert/update telephony_call_lead_ingest_log
+    Note over LS: Check lead context allowlist (e.g. public/from-missed-call)
+    LS->>Registry: HTTP POST normalized lead to registry URL
+    Registry-->>LS: HTTP 200 / Status Response
+    LS->>DB: Update processing status (SENT/FAILED) and record timestamp
 ```
 
 1. **Bastion Jump Host** (Public Subnet): Strictly handles secure SSH administration.
-2. **Nginx / SIP Proxy** (Public Subnet): Exposes HTTP default routes for reverse-proxying web consoles, and implements `iptables` DNAT rules to route SIP (5060) and RTP (16384-32768) traffic into the private subnet.
+2. **Nginx / SIP Proxy** (Public Subnet): Exposes HTTP default routes for reverse-proxying web consoles, and implements iptables DNAT rules to route SIP (5060) and RTP (16384-32768) traffic into the private subnet.
 3. **FreeSWITCH Host** (Private Subnet): Runs the core FreeSWITCH instance alongside PostgreSQL, pgAdmin, Kafka, Zookeeper, Event-Publisher, and Lead-Service in a host-network-bridged Docker Compose stack.
 
 ---
@@ -27,11 +46,12 @@ This branch contains the deployment files and source code for running the FreeSW
 
 ```
 .
+├── .github/                    # GitHub CI/CD Workflows
+│   └── workflows/
+│       └── deploy.yml          # Tag-based ECR build and remote deploy workflow
 ├── config/                     # FreeSWITCH config files
 │   └── freeswitch.xml          # Core dialplan, modules, and Sofia settings
 ├── infra/                      # Terraform & Deployment configurations
-│   ├── copy_files.sh           # Syncs code files to the remote private host
-│   ├── restart_services.sh     # Restarts remote Docker containers
 │   ├── run_call.sh             # Triggers a local loopback call for testing
 │   ├── run_db_query.sh         # Queries the remote database
 │   ├── instances.tf            # Provisions EC2 instances and Nginx/NAT userdata
@@ -45,7 +65,7 @@ This branch contains the deployment files and source code for running the FreeSW
 ├── docker-compose.yml          # Runs backend services on the private host
 ├── .env.example                # Example environment file template
 ├── .gitignore                  # Git ignore rules for Java/Terraform
-└── README.md                   # This setup & architecture guide
+└── README.md                   # This architecture guide
 ```
 
 ---
@@ -60,9 +80,12 @@ This branch contains the deployment files and source code for running the FreeSW
 2. Initialize and apply the configurations:
    ```bash
    terraform init
+   ```
+3. Apply configurations to provision resources:
+   ```bash
    terraform apply -auto-approve
    ```
-3. Record the outputs:
+4. Record the outputs:
    - `proxy_public_ip` (Proxy Gateway Elastic IP)
    - `bastion_public_ip` (SSH Jump Host)
    - `freeswitch_private_ip` (Private Server IP)
@@ -74,30 +97,16 @@ This branch contains the deployment files and source code for running the FreeSW
 2. Bind a public phone number to the trunk (e.g. `+13613101995`).
 3. Set Termination SIP URI to `coss-freeswitch.pstn.twilio.com` whitelisting the `proxy_public_ip`.
 
-### Step 3: Deploy Services on the Private Host
-1. Copy the code files to the private server via the helper script:
-   ```bash
-   ./copy_files.sh
-   ```
-2. SSH into the private instance:
-   ```bash
-   ssh -i freeswitch-key.pem -J admin@<bastion_public_ip> admin@<freeswitch_private_ip>
-   ```
-3. Navigate to `/home/admin/freeswitch` and create `.env` using `.env.example` as a template:
-   ```bash
-   cp .env.example .env
-   nano .env # Set your database password, allowed lead context, and lead registry URL
-   ```
-4. Start the stack:
-   ```bash
-   docker compose up -d --build
-   ```
+### Step 3: CI/CD Deployment via GitHub Actions
+We use automated tag-based GitHub Actions to build, package, and deploy backend updates. See the detailed `setup_guide.md` at the root of the repository to configure repository secrets and push tags.
+
+Once ECR build and deployment are completed, the Docker containers on the private instance will automatically be updated with the latest service code.
 
 ---
 
 ## 4. Verification & Testing
 
-1. Check that all 7 containers are healthy:
+1. Check that all 7 containers are healthy on the private host:
    ```bash
    docker ps --format "table {{.Names}}\t{{.Status}}"
    ```
