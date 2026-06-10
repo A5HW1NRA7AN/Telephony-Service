@@ -1,21 +1,42 @@
-# FreeSWITCH Telephony System - EKS/Kubernetes Deployment
+# FreeSWITCH Telephony System - Kubernetes Production Deployment
 
-This branch contains the deployment manifests and source code for running the FreeSWITCH telephony system on a Kubernetes cluster (such as Amazon EKS). It is designed to scale horizontally and deploy all stateful and stateless components inside Kubernetes pods.
+This branch contains the Kubernetes manifests, Helm packaging, and CI/CD configurations for running the FreeSWITCH telephony system on a production Kubernetes cluster. It is designed to scale horizontally and deploy all stateful and stateless components inside Kubernetes pods.
 
 ---
 
-## 1. Architecture Flow
+## 1. Runtime Flow and Architecture
 
-```
-                      SIP UDP 5060                           Internal Service Route
-  [ Twilio Trunk ] ────────────────> [ Kong Ingress Proxy ] ─────────────────────────> [ FreeSWITCH Pod ]
-                                       (UDP Routing)                                          │
-                                                                                              │ Outbound ESL
-                                                                                              ▼
-  [ Lead Registry ] <── [ Lead-Service Pod ] <── [ Kafka Broker ] <── [ Event-Publisher Pod ] ┘
+The sequence below details the call routing, event propagation, and ingestion pipeline inside the Kubernetes cluster:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Twilio as Twilio Trunk
+    participant Kong as Kong Ingress Controller<br/>(LoadBalancer)
+    participant FS as FreeSWITCH Pod<br/>(Private Subnet)
+    participant EP as Event-Publisher Pod<br/>(Spring Boot ESL)
+    participant Kafka as Strimzi Kafka Operator<br/>(telephony-cluster)
+    participant LS as Lead-Service Pod<br/>(Spring Boot JVM)
+    participant DB as PostgreSQL Pod<br/>(Persistent PVC)
+    participant Registry as Lead Registry<br/>(External API)
+
+    Twilio->>Kong: Inbound SIP INVITE (UDP 5060)
+    Note over Kong: Port Forwarding / Load Balancing
+    Kong->>FS: Route SIP Signalling (UDP 5060) & RTP Media
+    Note over FS: Call processed (greeting.mp3 played, hangup triggered)
+    FS->>EP: Event Outbound Socket Connection (ESL on Port 8084)
+    EP->>FS: Listen for CHANNEL_HANGUP & CHANNEL_HANGUP_COMPLETE
+    FS-->>EP: Emit call hangup event data
+    EP->>Kafka: Publish event to 'telephony-call-events' topic
+    LS->>Kafka: Consume event from topic
+    LS->>DB: Save raw event & insert/update telephony_call_lead_ingest_log
+    Note over LS: Check lead context allowlist (e.g. public/from-missed-call)
+    LS->>Registry: HTTP POST normalized lead to registry URL
+    Registry-->>LS: HTTP 200 / Status Response
+    LS->>DB: Update processing status (SENT/FAILED) and record timestamp
 ```
 
-1. **Kong Ingress Controller**: Handles incoming SIP traffic on UDP port `5060` and routes it to the active FreeSWITCH pods.
+1. **Kong Ingress Controller**: Handles incoming SIP traffic on UDP port 5060 and routes it to the active FreeSWITCH pods.
 2. **FreeSWITCH Pod**: Plays the welcome greeting and bridges the socket to the Event-Publisher.
 3. **Event-Publisher**: Connects to the FreeSWITCH outbound socket, receives events, and publishes them to the Kafka broker.
 4. **Lead-Service**: Consumes call hangup events from Kafka, logs them to PostgreSQL, and posts the lead payload to the external lead registry.
@@ -26,9 +47,12 @@ This branch contains the deployment manifests and source code for running the Fr
 
 ```
 .
-├── infra/                      # Kubernetes deployment manifests
-│   ├── apps/                   # Java services (event-publisher, lead-service)
-│   ├── freeswitch/             # FreeSWITCH configmaps, deployments, and Dockerfile
+├── Jenkinsfile                 # Jenkins CI/CD pipeline
+├── infra/                      # Kubernetes deployment configurations
+│   ├── apps/                   # Raw Java service deployments and configmaps
+│   ├── freeswitch/             # Raw FreeSWITCH configmaps and deployments
+│   ├── helm/                   # Helm packaging for the application stack
+│   │   └── telephony/          # Telephony Helm chart (Chart.yaml, values.yaml)
 │   ├── kafka/                  # Kafka cluster & topic definitions
 │   ├── kong/                   # UDP ingress mapping for Kong
 │   └── postgres/               # Postgres database and pgAdmin deployment
@@ -36,64 +60,52 @@ This branch contains the deployment manifests and source code for running the Fr
 │   ├── event-publisher/        # Spring Boot ESL event-to-Kafka publisher
 │   └── lead-service/           # Spring Boot Kafka-to-Registry lead ingestion service
 ├── .gitignore                  # Git ignore rules for Java/Kubernetes
-└── README.md                   # This setup guide
+└── README.md                   # This architecture guide
 ```
 
 ---
 
-## 3. Deployment Steps
+## 3. CI/CD Deployment with Jenkins
 
-### Step 1: Deploy Infrastructure
-1. Apply database manifests:
-   ```bash
-   kubectl apply -f infra/postgres/
-   ```
-2. Apply Kafka broker manifests (assumes Strimzi Operator is installed):
-   ```bash
-   kubectl apply -f infra/kafka/
-   ```
+We use a declarative Jenkins pipeline (`Jenkinsfile`) for automated testing and deployment.
 
-### Step 2: Build & Deploy FreeSWITCH
-1. Navigate to the FreeSWITCH deployment directory:
-   ```bash
-   cd infra/freeswitch
-   ```
-2. Build the FreeSWITCH Docker image (baking in the custom greeting):
-   ```bash
-   docker build -t your-registry/freeswitch:latest .
-   docker push your-registry/freeswitch:latest
-   ```
-3. Deploy FreeSWITCH configurations and deployment resources:
-   ```bash
-   kubectl apply -f freeswitch-configmap.yaml
-   kubectl apply -f freeswitch-deployment.yaml
-   kubectl apply -f freeswitch-service.yaml
-   ```
-
-### Step 3: Configure Ingress (Kong UDP Routing)
-1. Configure UDP routing for SIP signaling:
-   ```bash
-   kubectl apply -f infra/kong/udp-ingress.yaml
-   ```
-
-### Step 4: Build & Deploy Java Backend Services
-1. Build `event-publisher` and `lead-service` images:
-   ```bash
-   docker build -t your-registry/event-publisher:latest ./service/event-publisher
-   docker build -t your-registry/lead-service:latest ./service/lead-service
-   ```
-2. Deploy manifests:
-   ```bash
-   kubectl apply -f infra/apps/
-   ```
+### Jenkins Pipeline Stages
+1. **Checkout**: Checks out the branch code from Git.
+2. **Build Java Artifacts**: Packages the Spring Boot applications using Maven.
+3. **Docker Build & Tag**: Builds the Docker images for `lead-service`, `event-publisher`, and `freeswitch`.
+4. **ECR Push**: Pushes the Docker images to your AWS ECR Registry.
+5. **Deploy to Kubernetes**: Runs `helm upgrade --install` to deploy the Helm chart to the cluster using the current build number tags.
 
 ---
 
-## 4. Verification & Testing
+## 4. Packaging and Deploying via Helm
 
-1. Check that all pods are running and healthy:
-   ```bash
-   kubectl get pods -A
-   ```
-2. Initiate a call to your Twilio phone number mapped to the Kong UDP LoadBalancer IP.
-3. Check the lead service database or logs to verify that the call events were successfully processed.
+We package the entire telephony stack into a single Helm chart located at `infra/helm/telephony`.
+
+### Deploying the Helm Chart
+To deploy the chart using your custom values:
+```bash
+helm upgrade --install telephony ./infra/helm/telephony \
+  --set global.registry="379220350808.dkr.ecr.ap-northeast-1.amazonaws.com" \
+  --set leadService.image.tag="latest" \
+  --set eventPublisher.image.tag="latest" \
+  --set freeswitch.image.tag="latest"
+```
+
+---
+
+## 5. On-Premise Migration Roadmap
+
+To transition this telephony stack from AWS (EC2/EKS) to an on-premise hardware setup running Ubuntu 22.04 or 24.04:
+
+### 1. Cluster Bootstrapping (Kubespray)
+We will use **Kubespray** to deploy a standard, upstream Kubernetes cluster on physical nodes. Kubespray uses Ansible to automate:
+* Operating system package updates.
+* Container runtime installation (containerd).
+* Kubernetes system binaries setup (`kubelet`, `kubeadm`, `kubectl`).
+* Multi-node network configuration using the **Calico** CNI plugin.
+
+### 2. Load Balancing (MetalLB)
+Since on-premise environments do not have cloud load balancers, we configure **MetalLB** in Layer 2 mode inside the cluster.
+* Edit `values.yaml` to set `global.onPremise = true` and define your local subnet IP range in `metallb.ipRange`.
+* MetalLB will monitor your Kong Ingress Service and assign it a static physical IP from the pool to route external SIP calls into the cluster.

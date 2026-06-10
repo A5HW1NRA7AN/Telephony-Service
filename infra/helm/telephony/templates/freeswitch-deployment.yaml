@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: freeswitch
-  namespace: default
+  namespace: {{ .Release.Namespace }}
   labels:
     app: freeswitch
 spec:
-  replicas: 2
+  replicas: {{ .Values.freeswitch.replicaCount }}
   selector:
     matchLabels:
       app: freeswitch
@@ -15,10 +15,16 @@ spec:
       labels:
         app: freeswitch
     spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.global.imagePullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       containers:
       - name: freeswitch
-        image: 379220350808.dkr.ecr.ap-northeast-1.amazonaws.com/freeswitch-freeswitch:latest
-        imagePullPolicy: Always
+        image: "{{ .Values.global.registry }}/{{ .Values.freeswitch.image.repository }}:{{ .Values.freeswitch.image.tag }}"
+        imagePullPolicy: {{ .Values.freeswitch.image.pullPolicy }}
         securityContext:
           capabilities:
             add:
@@ -36,12 +42,7 @@ spec:
           containerPort: 8021
           protocol: TCP
         resources:
-          requests:
-            cpu: "500m"
-            memory: "512Mi"
-          limits:
-            cpu: "2"
-            memory: "2Gi"
+          {{- toYaml .Values.freeswitch.resources | nindent 10 }}
         volumeMounts:
         - name: config-volume
           mountPath: /etc/freeswitch/freeswitch.xml

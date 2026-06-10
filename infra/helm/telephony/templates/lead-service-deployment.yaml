@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: lead-service
-  namespace: default
+  namespace: {{ .Release.Namespace }}
   labels:
     app: lead-service
 spec:
-  replicas: 2
+  replicas: {{ .Values.leadService.replicaCount }}
   selector:
     matchLabels:
       app: lead-service
@@ -15,16 +15,22 @@ spec:
       labels:
         app: lead-service
     spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.global.imagePullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       containers:
       - name: lead-service
-        image: 379220350808.dkr.ecr.ap-northeast-1.amazonaws.com/freeswitch-lead-service:latest
-        imagePullPolicy: Always
+        image: "{{ .Values.global.registry }}/{{ .Values.leadService.image.repository }}:{{ .Values.leadService.image.tag }}"
+        imagePullPolicy: {{ .Values.leadService.image.pullPolicy }}
         ports:
         - containerPort: 8080
           name: http
-        env:
+        environment:
         - name: DB_URL
-          value: "jdbc:postgresql://postgres-service:5432/lead_db"
+          value: {{ .Values.leadService.dbUrl | quote }}
         - name: DB_USER
           valueFrom:
             secretKeyRef:
@@ -36,11 +42,13 @@ spec:
               name: postgres-secret
               key: postgres-password
         - name: KAFKA_BOOTSTRAP_SERVERS
-          value: "telephony-cluster-kafka-bootstrap:9092"
+          value: {{ .Values.kafka.bootstrapServers | quote }}
         - name: KAFKA_ENABLED
-          value: "true"
+          value: {{ .Values.leadService.kafkaEnabled | quote }}
         - name: AMI_ENABLED
           value: "false"
+        - name: LEAD_CONTEXT
+          value: {{ .Values.leadService.leadContext | quote }}
         - name: LEAD_REGISTRY_URL
           valueFrom:
             configMapKeyRef:
@@ -57,9 +65,4 @@ spec:
               name: lead-registry-config
               key: LEAD_REGISTRY_API_KEY_VALUE
         resources:
-          requests:
-            cpu: "250m"
-            memory: "256Mi"
-          limits:
-            cpu: "1"
-            memory: "512Mi"
+          {{- toYaml .Values.leadService.resources | nindent 10 }}

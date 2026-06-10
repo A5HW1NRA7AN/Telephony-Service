@@ -17,8 +17,8 @@ spec:
     spec:
       containers:
       - name: event-publisher
-        image: event-publisher:latest
-        imagePullPolicy: IfNotPresent
+        image: 379220350808.dkr.ecr.ap-northeast-1.amazonaws.com/freeswitch-event-publisher:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http

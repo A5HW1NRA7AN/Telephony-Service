@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lead-registry-config
+  namespace: {{ .Release.Namespace }}
+data:
+  LEAD_REGISTRY_URL: {{ .Values.leadRegistry.url | quote }}
+  LEAD_REGISTRY_API_KEY_HEADER: {{ .Values.leadRegistry.apiKeyHeader | quote }}
+  LEAD_REGISTRY_API_KEY_VALUE: {{ .Values.leadRegistry.apiKeyValue | quote }}

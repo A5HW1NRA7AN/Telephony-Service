@@ -1,0 +1,76 @@
+global:
+  registry: "379220350808.dkr.ecr.ap-northeast-1.amazonaws.com"
+  imagePullSecrets: []
+  onPremise: false
+
+leadService:
+  replicaCount: 2
+  image:
+    repository: "freeswitch-lead-service"
+    tag: "latest"
+    pullPolicy: "Always"
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+  dbUrl: "jdbc:postgresql://postgres-service:5432/lead_db"
+  kafkaEnabled: "true"
+  leadContext: "from-missed-call"
+
+eventPublisher:
+  replicaCount: 2
+  image:
+    repository: "freeswitch-event-publisher"
+    tag: "latest"
+    pullPolicy: "Always"
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+
+freeswitch:
+  replicaCount: 2
+  image:
+    repository: "freeswitch-freeswitch"
+    tag: "latest"
+    pullPolicy: "Always"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+
+postgres:
+  replicaCount: 1
+  image: "postgres:16-alpine"
+  database: "lead_db"
+  user: "lead_user"
+  password: "lead_password"
+  storageSize: "10Gi"
+
+pgadmin:
+  replicaCount: 1
+  image: "dpage/pgadmin4:latest"
+  email: "admin@admin.com"
+  password: "admin"
+
+kafka:
+  bootstrapServers: "telephony-cluster-kafka-bootstrap:9092"
+  topic: "telephony-call-events"
+
+leadRegistry:
+  url: "http://aa21eaac375b4493ca4a6431d5a180a6-33565e963dc9b6f8.elb.us-west-1.amazonaws.com/leads/v1/initiate"
+  apiKeyHeader: ""
+  apiKeyValue: ""
+
+metallb:
+  enabled: true
+  ipRange: "10.0.102.200-10.0.102.250"

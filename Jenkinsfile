@@ -1,0 +1,87 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION     = 'ap-northeast-1'
+        AWS_ACCOUNT_ID = '379220350808'
+        ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        
+        LEAD_SERVICE_REPO    = 'freeswitch-lead-service'
+        EVENT_PUBLISHER_REPO = 'freeswitch-event-publisher'
+        FREESWITCH_REPO      = 'freeswitch-freeswitch'
+        
+        // Jenkins credentials IDs
+        AWS_CREDENTIALS_ID  = 'aws-credentials'
+        KUBECONFIG_CRED_ID  = 'kubeconfig'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Java Artifacts') {
+            steps {
+                sh 'mvn clean package -DskipTests -f service/lead-service/pom.xml'
+                sh 'mvn clean package -DskipTests -f service/event-publisher/pom.xml'
+            }
+        }
+
+        stage('Docker Build & Tag') {
+            steps {
+                script {
+                    sh "docker build -t ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:latest ./service/lead-service"
+                    sh "docker build -t ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:latest ./service/event-publisher"
+                    sh "docker build -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:latest ./infra/freeswitch"
+                }
+            }
+        }
+
+        stage('ECR Push') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: env.AWS_CREDENTIALS_ID,
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
+                    
+                    sh "docker push ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:${BUILD_NUMBER}"
+                    sh "docker push ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:latest"
+                    
+                    sh "docker push ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:${BUILD_NUMBER}"
+                    sh "docker push ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:latest"
+                    
+                    sh "docker push ${ECR_REGISTRY}/${FREESWITCH_REPO}:${BUILD_NUMBER}"
+                    sh "docker push ${ECR_REGISTRY}/${FREESWITCH_REPO}:latest"
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                withCredentials([file(credentialsId: env.KUBECONFIG_CRED_ID, variable: 'KUBECONFIG')]) {
+                    sh """
+                        helm upgrade --install telephony ./infra/helm/telephony \
+                            --set global.registry=${ECR_REGISTRY} \
+                            --set leadService.image.tag=${BUILD_NUMBER} \
+                            --set eventPublisher.image.tag=${BUILD_NUMBER} \
+                            --set freeswitch.image.tag=${BUILD_NUMBER} \
+                            --kubeconfig ${KUBECONFIG}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh "docker rmi ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:${BUILD_NUMBER} || true"
+            sh "docker rmi ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:${BUILD_NUMBER} || true"
+            sh "docker rmi ${ECR_REGISTRY}/${FREESWITCH_REPO}:${BUILD_NUMBER} || true"
+        }
+    }
+}

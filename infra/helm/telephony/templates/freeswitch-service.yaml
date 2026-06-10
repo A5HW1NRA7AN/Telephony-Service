@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: freeswitch-service
+  namespace: {{ .Release.Namespace }}
+spec:
+  ports:
+  - name: sip-udp
+    port: 5060
+    targetPort: 5060
+    protocol: UDP
+  - name: sip-tcp
+    port: 5060
+    targetPort: 5060
+    protocol: TCP
+  - name: esl
+    port: 8021
+    targetPort: 8021
+    protocol: TCP
+  selector:
+    app: freeswitch
+  # If running on-premise without a cloud load balancer, use LoadBalancer with MetalLB or NodePort
+  type: {{ if .Values.global.onPremise }}LoadBalancer{{ else }}ClusterIP{{ end }}
