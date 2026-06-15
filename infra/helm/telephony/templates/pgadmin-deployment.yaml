@@ -21,7 +21,7 @@ spec:
         ports:
         - containerPort: 80
           name: http
-        environment:
+        env:
         - name: PGADMIN_DEFAULT_EMAIL
           valueFrom:
             secretKeyRef:

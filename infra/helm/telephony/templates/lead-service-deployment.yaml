@@ -28,7 +28,7 @@ spec:
         ports:
         - containerPort: 8080
           name: http
-        environment:
+        env:
         - name: DB_URL
           value: {{ .Values.leadService.dbUrl | quote }}
         - name: DB_USER
