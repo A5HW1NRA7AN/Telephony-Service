@@ -34,7 +34,8 @@ all:
   hosts:
     node1:
       ansible_host: 127.0.0.1
-      ip: 127.0.0.1
+      ip: 10.0.1.143
+      access_ip: 10.0.1.143
       ansible_connection: local
   children:
     kube_control_plane:
