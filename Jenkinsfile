@@ -6,9 +6,9 @@ pipeline {
         AWS_ACCOUNT_ID = '379220350808'
         ECR_REGISTRY   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         
-        LEAD_SERVICE_REPO    = 'freeswitch-lead-service'
-        EVENT_PUBLISHER_REPO = 'freeswitch-event-publisher'
-        FREESWITCH_REPO      = 'freeswitch-freeswitch'
+        LEAD_SERVICE_REPO    = 'freeswitch-lead-service-ivr'
+        EVENT_PUBLISHER_REPO = 'freeswitch-event-publisher-ivr'
+        FREESWITCH_REPO      = 'freeswitch-freeswitch-ivr'
         
         // Jenkins credentials IDs
         AWS_CREDENTIALS_ID  = 'aws-credentials'
