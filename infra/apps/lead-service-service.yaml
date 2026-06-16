@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lead-service-service
+  namespace: default
+  labels:
+    app: lead-service
+spec:
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: lead-service
+  type: ClusterIP

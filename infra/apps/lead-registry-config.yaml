@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lead-registry-config
+  namespace: default
+data:
+  LEAD_REGISTRY_URL: "http://aa21eaac375b4493ca4a6431d5a180a6-33565e963dc9b6f8.elb.us-west-1.amazonaws.com/leads/v1/initiate"
+  LEAD_REGISTRY_API_KEY_HEADER: ""
+  LEAD_REGISTRY_API_KEY_VALUE: ""

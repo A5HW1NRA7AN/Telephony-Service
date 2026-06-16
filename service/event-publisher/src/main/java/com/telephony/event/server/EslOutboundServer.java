@@ -150,21 +150,7 @@ public class EslOutboundServer {
                 payload.put("calledNumber", destination);
                 payload.put("context", context);
                 payload.put("timestamp", Instant.now().toString());
-
-                // Extract IVR results set by FreeSWITCH dialplan
-                String ivrSelection = headers.get("variable_ivr_result");
-                String ivrLanguage = headers.get("variable_ivr_lang");
-                if (ivrSelection != null && !ivrSelection.isBlank()) {
-                    payload.put("ivrSelection", ivrSelection);
-                }
-                if (ivrLanguage != null && !ivrLanguage.isBlank()) {
-                    payload.put("ivrLanguage", ivrLanguage);
-                }
-
                 payload.put("rawHeaders", headers);
-
-                log.info("Publishing event {} to Kafka for Call: {}. ivrSelection: {}, ivrLanguage: {}", 
-                        eventType, uniqueId, ivrSelection, ivrLanguage);
 
                 String json = objectMapper.writeValueAsString(payload);
                 kafkaTemplate.send(topic, uniqueId, json);

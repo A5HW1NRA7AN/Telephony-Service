@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: freeswitch-config
-  namespace: {{ .Release.Namespace }}
+  namespace: default
 data:
   freeswitch.xml: |
     <?xml version="1.0" encoding="utf-8"?>
@@ -109,7 +109,7 @@ data:
               <!-- Play greeting baked in Docker image -->
               <action application="playback" data="/usr/share/freeswitch/sounds/custom/greeting.mp3"/>
               <!-- Connect to Event Publisher via Outbound ESL socket -->
-              <action application="socket" data="event-publisher-service.{{ .Release.Namespace }}.svc.cluster.local:8084 async full"/>
+              <action application="socket" data="event-publisher-service:8084 async full"/>
               <!-- Hangup the call if not already hung up by publisher -->
               <action application="hangup"/>
             </condition>

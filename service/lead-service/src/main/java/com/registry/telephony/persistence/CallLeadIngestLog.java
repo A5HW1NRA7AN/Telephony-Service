@@ -63,11 +63,5 @@ public class CallLeadIngestLog {
 
     @Column(name = "sent_at")
     private Instant sentAt;
-
-    @Column(name = "ivr_selection", length = 32)
-    private String ivrSelection;
-
-    @Column(name = "ivr_language", length = 16)
-    private String ivrLanguage;
 }
 

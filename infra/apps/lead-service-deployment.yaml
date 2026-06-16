@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lead-service
+  namespace: default
+  labels:
+    app: lead-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lead-service
+  template:
+    metadata:
+      labels:
+        app: lead-service
+    spec:
+      containers:
+      - name: lead-service
+        image: 379220350808.dkr.ecr.ap-northeast-1.amazonaws.com/freeswitch-lead-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: DB_URL
+          value: "jdbc:postgresql://postgres-service:5432/lead_db"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: postgres-password
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "telephony-cluster-kafka-bootstrap:9092"
+        - name: KAFKA_ENABLED
+          value: "true"
+        - name: AMI_ENABLED
+          value: "false"
+        - name: LEAD_REGISTRY_URL
+          valueFrom:
+            configMapKeyRef:
+              name: lead-registry-config
+              key: LEAD_REGISTRY_URL
+        - name: LEAD_REGISTRY_API_KEY_HEADER
+          valueFrom:
+            configMapKeyRef:
+              name: lead-registry-config
+              key: LEAD_REGISTRY_API_KEY_HEADER
+        - name: LEAD_REGISTRY_API_KEY_VALUE
+          valueFrom:
+            configMapKeyRef:
+              name: lead-registry-config
+              key: LEAD_REGISTRY_API_KEY_VALUE
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "1"
+            memory: "512Mi"
