@@ -50,3 +50,10 @@ Thumbs.db
 *.war
 *.log
 hs_err_pid*
+
+# --- Built/Generated Artifacts ---
+infra/event-publisher.tar
+infra/freeswitch.tar
+infra/env.sh
+infra/hosts_k8s.yaml
+

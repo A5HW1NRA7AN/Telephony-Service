@@ -47,6 +47,19 @@ public class KafkaLeadConsumer {
             eventData.put("Linkedid", payload.getUniqueId());
             eventData.put("CallerIDNum", payload.getCallerNumber());
             eventData.put("ConnectedLineNum", payload.getCallerNumber());
+
+            // Extract and map IVR selection and language
+            String ivrSel = payload.getIvrSelection();
+            if (ivrSel == null && payload.getRawHeaders() != null) {
+                ivrSel = payload.getRawHeaders().get("variable_ivr_result");
+            }
+            eventData.put("ivrSelection", ivrSel != null ? ivrSel : "");
+
+            String ivrLang = payload.getIvrLanguage();
+            if (ivrLang == null && payload.getRawHeaders() != null) {
+                ivrLang = payload.getRawHeaders().get("variable_ivr_lang");
+            }
+            eventData.put("ivrLanguage", ivrLang != null ? ivrLang : "");
             
             // Map destination number
             String called = payload.getCalledNumber();
@@ -88,6 +101,8 @@ public class KafkaLeadConsumer {
         private String calledNumber;
         private String context;
         private String timestamp;
+        private String ivrSelection;
+        private String ivrLanguage;
         private Map<String, String> rawHeaders;
     }
 }

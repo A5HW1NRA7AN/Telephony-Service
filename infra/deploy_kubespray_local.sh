@@ -1,12 +1,21 @@
 #!/bin/bash
 set -e
 
+# Resolve script directory and source environment variables
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/env.sh" ]; then
+  source "$SCRIPT_DIR/env.sh"
+else
+  echo "Error: env.sh not found in $SCRIPT_DIR. Please run 'terraform apply' first." >&2
+  exit 1
+fi
+
 # Ensure file permissions on private key are correct
-chmod 600 /home/rajan/Projects/Telephony/infra/freeswitch-key.pem
+chmod 600 "$KEY_PATH"
 
-echo "==> Connecting to private server 10.0.1.143 to trigger remote local installation..."
+echo "==> Connecting to private server $PRIVATE_IP to trigger remote local installation..."
 
-ssh -i /home/rajan/Projects/Telephony/infra/freeswitch-key.pem -o StrictHostKeyChecking=no -o ProxyCommand="ssh -i /home/rajan/Projects/Telephony/infra/freeswitch-key.pem -o StrictHostKeyChecking=no -W %h:%p ubuntu@18.183.139.53" ubuntu@10.0.1.143 'bash -s' << 'EOF'
+ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no -o ProxyCommand="ssh -i $KEY_PATH -o StrictHostKeyChecking=no -W %h:%p ubuntu@$BASTION_IP" ubuntu@$PRIVATE_IP "bash -s" << EOF
 set -e
 
 echo "==> Updating apt package cache..."
@@ -34,8 +43,8 @@ all:
   hosts:
     node1:
       ansible_host: 127.0.0.1
-      ip: 10.0.1.143
-      access_ip: 10.0.1.143
+      ip: $PRIVATE_IP
+      access_ip: $PRIVATE_IP
       ansible_connection: local
   children:
     kube_control_plane:

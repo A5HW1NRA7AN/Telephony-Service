@@ -41,6 +41,7 @@ data:
             <load module="mod_sofia"/>
             <load module="mod_sndfile"/>
             <load module="mod_shout"/>
+            <load module="mod_loopback"/>
             <load module="mod_event_socket"/>
           </modules>
         </configuration>
@@ -73,6 +74,7 @@ data:
             <!-- External Profile for Twilio Trunk Ingress -->
             <profile name="external">
               <settings>
+                <param name="NDLB-force-rport" value="true"/>
                 <param name="debug" value="0"/>
                 <param name="sip-trace" value="no"/>
                 <param name="context" value="public"/>
@@ -85,8 +87,10 @@ data:
                 <param name="rtp-timer-name" value="soft"/>
                 <param name="rtp-ip" value="$${local_ip_v4}"/>
                 <param name="sip-ip" value="$${local_ip_v4}"/>
-                <param name="ext-rtp-ip" value="auto-nat"/>
-                <param name="ext-sip-ip" value="auto-nat"/>
+                <param name="ext-rtp-ip" value="{{ .Values.freeswitch.extIp }}"/>
+                <param name="ext-sip-ip" value="{{ .Values.freeswitch.extIp }}"/>
+                <param name="rtp-start-port" value="16384"/>
+                <param name="rtp-end-port" value="16484"/>
                 <param name="rtp-timeout-sec" value="300"/>
                 <param name="rtp-hold-timeout-sec" value="1800"/>
                 <param name="challenge-realm" value="auto_to_local"/>
@@ -99,18 +103,106 @@ data:
       <!-- DIALPLAN SECTION -->
       <section name="dialplan" description="Regex Routing Table">
         <context name="public">
+          <!-- Inbound entry point: Language Selection Menu -->
           <extension name="inbound_sip">
-            <!-- Match all incoming calls -->
             <condition field="destination_number" expression="^.*$">
-              <!-- Answer the call -->
               <action application="answer"/>
-              <!-- Log call arrival -->
               <action application="log" data="INFO Incoming call from ${caller_id_number} to ${destination_number}"/>
-              <!-- Play greeting baked in Docker image -->
-              <action application="playback" data="/usr/share/freeswitch/sounds/custom/greeting.mp3"/>
-              <!-- Connect to Event Publisher via Outbound ESL socket -->
+              
+              <!-- Collect Language choice (1=EN, 2=AM) -->
+              <action application="play_and_get_digits" data="1 1 3 5000 # /usr/share/freeswitch/sounds/custom/lang_select.wav /usr/share/freeswitch/sounds/custom/lang_invalid.wav ivr_language ^[12]$"/>
+              <action application="execute_extension" data="ivr_lang_branch_${ivr_language}"/>
+            </condition>
+          </extension>
+
+          <!-- Language Selection branch fallback (timeout or invalid key after 3 attempts) -->
+          <extension name="ivr_lang_branch_">
+            <condition field="destination_number" expression="^ivr_lang_branch_$">
+              <action application="set" data="ivr_lang=UNKNOWN"/>
+              <action application="set" data="ivr_result=TIMEOUT"/>
+              <action application="playback" data="/usr/share/freeswitch/sounds/custom/en_goodbye.wav"/>
+              <action application="execute_extension" data="ivr_socket_connect"/>
+            </condition>
+          </extension>
+
+          <!-- Language Branch 1: English -->
+          <extension name="ivr_lang_branch_1">
+            <condition field="destination_number" expression="^ivr_lang_branch_1$">
+              <action application="set" data="ivr_lang=EN"/>
+              <!-- Prompt for Credit Access (English) -->
+              <action application="play_and_get_digits" data="1 1 3 5000 # /usr/share/freeswitch/sounds/custom/en_credit_menu.wav /usr/share/freeswitch/sounds/custom/en_invalid_entry.wav ivr_selection ^[12]$"/>
+              <action application="execute_extension" data="ivr_en_branch_${ivr_selection}"/>
+            </condition>
+          </extension>
+
+          <!-- Language Branch 2: Amharic -->
+          <extension name="ivr_lang_branch_2">
+            <condition field="destination_number" expression="^ivr_lang_branch_2$">
+              <action application="set" data="ivr_lang=AM"/>
+              <!-- Prompt for Credit Access (Amharic) -->
+              <action application="play_and_get_digits" data="1 1 3 5000 # /usr/share/freeswitch/sounds/custom/am_credit_menu.wav /usr/share/freeswitch/sounds/custom/am_invalid_entry.wav ivr_selection ^[12]$"/>
+              <action application="execute_extension" data="ivr_am_branch_${ivr_selection}"/>
+            </condition>
+          </extension>
+
+          <!-- English Branch 1: Accept -->
+          <extension name="ivr_en_branch_1">
+            <condition field="destination_number" expression="^ivr_en_branch_1$">
+              <action application="set" data="ivr_result=ACCEPT"/>
+              <action application="playback" data="/usr/share/freeswitch/sounds/custom/en_confirm_accept.wav"/>
+              <action application="execute_extension" data="ivr_socket_connect"/>
+            </condition>
+          </extension>
+
+          <!-- English Branch 2: Decline -->
+          <extension name="ivr_en_branch_2">
+            <condition field="destination_number" expression="^ivr_en_branch_2$">
+              <action application="set" data="ivr_result=DECLINE"/>
+              <action application="playback" data="/usr/share/freeswitch/sounds/custom/en_confirm_decline.wav"/>
+              <action application="execute_extension" data="ivr_socket_connect"/>
+            </condition>
+          </extension>
+
+          <!-- English Branch Fallback: Timeout/Invalid -->
+          <extension name="ivr_en_branch_">
+            <condition field="destination_number" expression="^ivr_en_branch_$">
+              <action application="set" data="ivr_result=TIMEOUT"/>
+              <action application="playback" data="/usr/share/freeswitch/sounds/custom/en_goodbye.wav"/>
+              <action application="execute_extension" data="ivr_socket_connect"/>
+            </condition>
+          </extension>
+
+          <!-- Amharic Branch 1: Accept -->
+          <extension name="ivr_am_branch_1">
+            <condition field="destination_number" expression="^ivr_am_branch_1$">
+              <action application="set" data="ivr_result=ACCEPT"/>
+              <action application="playback" data="/usr/share/freeswitch/sounds/custom/am_confirm_accept.wav"/>
+              <action application="execute_extension" data="ivr_socket_connect"/>
+            </condition>
+          </extension>
+
+          <!-- Amharic Branch 2: Decline -->
+          <extension name="ivr_am_branch_2">
+            <condition field="destination_number" expression="^ivr_am_branch_2$">
+              <action application="set" data="ivr_result=DECLINE"/>
+              <action application="playback" data="/usr/share/freeswitch/sounds/custom/am_confirm_decline.wav"/>
+              <action application="execute_extension" data="ivr_socket_connect"/>
+            </condition>
+          </extension>
+
+          <!-- Amharic Branch Fallback: Timeout/Invalid -->
+          <extension name="ivr_am_branch_">
+            <condition field="destination_number" expression="^ivr_am_branch_$">
+              <action application="set" data="ivr_result=TIMEOUT"/>
+              <action application="playback" data="/usr/share/freeswitch/sounds/custom/am_goodbye.wav"/>
+              <action application="execute_extension" data="ivr_socket_connect"/>
+            </condition>
+          </extension>
+
+          <!-- Establish ESL Socket Connection -->
+          <extension name="ivr_socket_connect">
+            <condition field="destination_number" expression="^ivr_socket_connect$">
               <action application="socket" data="event-publisher-service.{{ .Release.Namespace }}.svc.cluster.local:8084 async full"/>
-              <!-- Hangup the call if not already hung up by publisher -->
               <action application="hangup"/>
             </condition>
           </extension>

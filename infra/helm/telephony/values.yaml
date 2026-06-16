@@ -19,7 +19,7 @@ leadService:
       memory: "512Mi"
   dbUrl: "jdbc:postgresql://postgres-service:5432/lead_db"
   kafkaEnabled: "true"
-  leadContext: "from-missed-call"
+  leadContext: "from-missed-call,public"
 
 eventPublisher:
   replicaCount: 2
@@ -36,7 +36,8 @@ eventPublisher:
       memory: "512Mi"
 
 freeswitch:
-  replicaCount: 2
+  replicaCount: 1
+  extIp: "52.197.199.202"
   image:
     repository: "freeswitch-freeswitch"
     tag: "latest"

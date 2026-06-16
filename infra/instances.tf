@@ -79,6 +79,7 @@ resource "aws_instance" "proxy" {
   subnet_id                   = module.vpc.public_subnets[1]
   vpc_security_group_ids      = [aws_security_group.proxy_sg.id]
   associate_public_ip_address = true
+  source_dest_check           = false
 
   user_data = <<-USERDATA
 #!/bin/bash
@@ -121,7 +122,7 @@ server {
     server_name _;
 
     location /pgadmin/ {
-        proxy_pass http://\$PRIVATE_FS_IP:5050/;
+        proxy_pass http://$PRIVATE_FS_IP:5050/;
         proxy_set_header Host \$host;
         proxy_set_header Host \$http_host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -132,7 +133,7 @@ server {
     }
 
     location /leads/ {
-        proxy_pass http://\$PRIVATE_FS_IP:8080/;
+        proxy_pass http://$PRIVATE_FS_IP:8080/;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
