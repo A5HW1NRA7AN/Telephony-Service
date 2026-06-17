@@ -68,4 +68,4 @@ To deploy in an **on-premise** simulation:
    helm upgrade --install telephony ./infra/helm/telephony \
      --set global.onPremise=true
    ```
-This will configure MetalLB to assign a static IP to the FreeSWITCH load balancer and Kong ingress automatically.
+This will configure MetalLB to assign static physical IPs to your services automatically.

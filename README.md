@@ -12,18 +12,15 @@ The sequence below details the call routing, event propagation, and ingestion pi
 sequenceDiagram
     autonumber
     actor Twilio as Twilio Trunk
-    participant Kong as Kong Ingress Controller<br/>(LoadBalancer)
-    participant FS as FreeSWITCH Pod<br/>(Private Subnet)
+    participant FS as FreeSWITCH Pod<br/>(Private Subnet via Proxy DNAT)
     participant EP as Event-Publisher Pod<br/>(Spring Boot ESL)
     participant Kafka as Strimzi Kafka Operator<br/>(telephony-cluster)
     participant LS as Lead-Service Pod<br/>(Spring Boot JVM)
     participant DB as PostgreSQL Pod<br/>(Persistent PVC)
     participant Registry as Lead Registry<br/>(External API)
 
-    Twilio->>Kong: Inbound SIP INVITE (UDP 5060)
-    Note over Kong: Port Forwarding / Load Balancing
-    Kong->>FS: Route SIP Signalling (UDP 5060) & RTP Media
-    Note over FS: Call processed (greeting.mp3 played, hangup triggered)
+    Twilio->>FS: Inbound SIP INVITE & RTP Media (via Public Proxy DNAT)
+    Note over FS: Call processed (IVR options played/captured, hangup triggered)
     FS->>EP: Event Outbound Socket Connection (ESL on Port 8084)
     EP->>FS: Listen for CHANNEL_HANGUP & CHANNEL_HANGUP_COMPLETE
     FS-->>EP: Emit call hangup event data
@@ -36,10 +33,10 @@ sequenceDiagram
     LS->>DB: Update processing status (SENT/FAILED) and record timestamp
 ```
 
-1. **Kong Ingress Controller**: Handles incoming SIP traffic on UDP port 5060 and routes it to the active FreeSWITCH pods.
-2. **FreeSWITCH Pod**: Plays the welcome greeting and bridges the socket to the Event-Publisher.
-3. **Event-Publisher**: Connects to the FreeSWITCH outbound socket, receives events, and publishes them to the Kafka broker.
-4. **Lead-Service**: Consumes call hangup events from Kafka, logs them to PostgreSQL, and posts the lead payload to the external lead registry.
+1. **FreeSWITCH Pod**: Listens on the host network for forwarded SIP/RTP traffic from the public proxy, plays the welcome greeting/IVR menus, and connects the ESL socket to Event-Publisher.
+2. **Event-Publisher**: Connects to the FreeSWITCH outbound socket, receives events, and publishes them to the Kafka broker.
+3. **Lead-Service**: Consumes call hangup events from Kafka, logs them to PostgreSQL, and posts the lead payload to the external lead registry.
+
 
 ---
 
@@ -49,16 +46,16 @@ sequenceDiagram
 .
 ├── Jenkinsfile                 # Jenkins CI/CD pipeline
 ├── infra/                      # Kubernetes deployment configurations
-│   ├── apps/                   # Raw Java service deployments and configmaps
 │   ├── freeswitch/             # Raw FreeSWITCH configmaps and deployments
 │   ├── helm/                   # Helm packaging for the application stack
 │   │   └── telephony/          # Telephony Helm chart (Chart.yaml, values.yaml)
 │   ├── kafka/                  # Kafka cluster & topic definitions
-│   ├── kong/                   # UDP ingress mapping for Kong
 │   └── postgres/               # Postgres database and pgAdmin deployment
 ├── service/                    # Backend services source code
 │   ├── event-publisher/        # Spring Boot ESL event-to-Kafka publisher
 │   └── lead-service/           # Spring Boot Kafka-to-Registry lead ingestion service
+├── test/                       # Integration testing scripts
+│   └── integration/            # Test call and DB validation utilities
 ├── .gitignore                  # Git ignore rules for Java/Kubernetes
 └── README.md                   # This architecture guide
 ```
@@ -108,4 +105,4 @@ We will use **Kubespray** to deploy a standard, upstream Kubernetes cluster on p
 ### 2. Load Balancing (MetalLB)
 Since on-premise environments do not have cloud load balancers, we configure **MetalLB** in Layer 2 mode inside the cluster.
 * Edit `values.yaml` to set `global.onPremise = true` and define your local subnet IP range in `metallb.ipRange`.
-* MetalLB will monitor your Kong Ingress Service and assign it a static physical IP from the pool to route external SIP calls into the cluster.
+* MetalLB will assign static physical IPs to your Kubernetes services from the pool to route external traffic into the cluster.
