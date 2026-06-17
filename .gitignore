@@ -55,5 +55,8 @@ hs_err_pid*
 *.tar
 
 # --- Generated environment files ---
-infra/env.sh
-infra/hosts_k8s.yaml
+test/integration/env.sh
+test/integration/hosts_k8s.yaml
+test/integration/*.pem
+test/integration/*.key
+

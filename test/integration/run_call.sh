@@ -3,10 +3,14 @@ set -e
 
 # Resolve script directory and source environment variables
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/env.sh" ]; then
+ENV_SH_PATH="${ENV_SH_PATH:-$SCRIPT_DIR/../../../On-Prem-Infrastructure/terraform/env.sh}"
+
+if [ -f "$ENV_SH_PATH" ]; then
+  source "$ENV_SH_PATH"
+elif [ -f "$SCRIPT_DIR/env.sh" ]; then
   source "$SCRIPT_DIR/env.sh"
 else
-  echo "Error: env.sh not found in $SCRIPT_DIR. Please run 'terraform apply' first." >&2
+  echo "Error: env.sh not found. Please ensure env.sh exists or set ENV_SH_PATH." >&2
   exit 1
 fi
 
