@@ -10,22 +10,31 @@ import org.jboss.netty.channel.ChannelHandlerContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Outbound ESL server that receives call events from FreeSWITCH
+ * and forwards them to the lead-service via REST API.
+ */
 @Component
 @Slf4j
 public class EslOutboundServer {
 
     private final String host;
     private final int port;
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final String topic;
+    private final RestTemplate restTemplate;
+    private final String leadServiceUrl;
+    private final int maxRetries;
+    private final long retryDelayMs;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private SocketClient socketClient;
@@ -33,12 +42,16 @@ public class EslOutboundServer {
     public EslOutboundServer(
             @Value("${telephony.esl.outbound-host:0.0.0.0}") String host,
             @Value("${telephony.esl.outbound-port:8084}") int port,
-            KafkaTemplate<String, String> kafkaTemplate,
-            @Value("${telephony.esl.kafka.topic:telephony-call-events}") String topic) {
+            RestTemplate restTemplate,
+            @Value("${telephony.lead-service.url:http://lead-service:8080}") String leadServiceUrl,
+            @Value("${telephony.lead-service.max-retries:3}") int maxRetries,
+            @Value("${telephony.lead-service.retry-delay-ms:1000}") long retryDelayMs) {
         this.host = host;
         this.port = port;
-        this.kafkaTemplate = kafkaTemplate;
-        this.topic = topic;
+        this.restTemplate = restTemplate;
+        this.leadServiceUrl = leadServiceUrl;
+        this.maxRetries = maxRetries;
+        this.retryDelayMs = retryDelayMs;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -94,7 +107,7 @@ public class EslOutboundServer {
             log.info("Received outbound ESL connection from FreeSWITCH. Unique-ID: {}, Caller: {}, Destination: {}, Context: {}",
                     channelUniqueId, callerIdNumber, destinationNumber, contextName);
 
-            // Send CALL_START event to Kafka
+            // Send CALL_START event to lead-service
             publishCallEvent("CALL_START", channelUniqueId, callerIdNumber, destinationNumber, contextName, headers);
 
             // Subscribe to events for this channel
@@ -141,7 +154,12 @@ public class EslOutboundServer {
             log.info("Outbound ESL channel socket disconnected");
         }
 
-        private void publishCallEvent(String eventType, String uniqueId, String caller, String destination, String context, Map<String, String> headers) {
+        /**
+         * Publishes a call event to lead-service via REST POST.
+         * Uses fire-and-forget with configurable retry on failure.
+         */
+        private void publishCallEvent(String eventType, String uniqueId, String caller,
+                                       String destination, String context, Map<String, String> headers) {
             try {
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("eventType", eventType);
@@ -151,27 +169,54 @@ public class EslOutboundServer {
                 payload.put("context", context);
                 payload.put("timestamp", Instant.now().toString());
 
-                // Extract IVR results set by FreeSWITCH dialplan
+                // Extract IVR results set by FreeSWITCH dialplan (empty on non-IVR branches)
                 String ivrSelection = headers.get("variable_ivr_result");
                 String ivrLanguage = headers.get("variable_ivr_lang");
-                if (ivrSelection != null && !ivrSelection.isBlank()) {
-                    payload.put("ivrSelection", ivrSelection);
-                }
-                if (ivrLanguage != null && !ivrLanguage.isBlank()) {
-                    payload.put("ivrLanguage", ivrLanguage);
-                }
+                payload.put("ivrSelection", ivrSelection != null ? ivrSelection : "");
+                payload.put("ivrLanguage", ivrLanguage != null ? ivrLanguage : "");
 
                 payload.put("rawHeaders", headers);
 
-                log.info("Publishing event {} to Kafka for Call: {}. ivrSelection: {}, ivrLanguage: {}", 
+                log.info("Publishing event {} to lead-service for Call: {}. ivrSelection: {}, ivrLanguage: {}",
                         eventType, uniqueId, ivrSelection, ivrLanguage);
 
                 String json = objectMapper.writeValueAsString(payload);
-                kafkaTemplate.send(topic, uniqueId, json);
-                log.debug("Published {} event to Kafka topic {}: {}", eventType, topic, json);
+                postWithRetry(json);
+
             } catch (Exception e) {
-                log.error("Failed to publish event to Kafka", e);
+                log.error("Failed to publish call event to lead-service", e);
             }
+        }
+
+        /**
+         * Posts the event JSON to lead-service with retry logic.
+         * Fire-and-forget: logs errors and moves on after max retries.
+         */
+        private void postWithRetry(String json) {
+            String url = leadServiceUrl + "/api/v1/call-events";
+            HttpHeaders httpHeaders = new HttpHeaders();
+            httpHeaders.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<String> request = new HttpEntity<>(json, httpHeaders);
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    restTemplate.postForEntity(url, request, String.class);
+                    log.debug("Successfully posted call event to lead-service (attempt {})", attempt);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Failed to post call event to lead-service (attempt {}/{}): {}",
+                            attempt, maxRetries, e.getMessage());
+                    if (attempt < maxRetries) {
+                        try {
+                            Thread.sleep(retryDelayMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+            }
+            log.error("Exhausted {} retries posting call event to lead-service. Event dropped.", maxRetries);
         }
     }
 }

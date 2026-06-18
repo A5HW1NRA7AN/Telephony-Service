@@ -31,9 +31,9 @@ spec:
         - containerPort: 8084
           name: esl-socket
         env:
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          value: {{ .Values.kafka.bootstrapServers | quote }}
-        - name: KAFKA_TOPIC
-          value: {{ .Values.kafka.topic | quote }}
+        - name: LEAD_SERVICE_URL
+          value: {{ .Values.eventPublisher.leadServiceUrl | quote }}
+        - name: LEAD_SERVICE_MAX_RETRIES
+          value: {{ .Values.eventPublisher.maxRetries | quote }}
         resources:
           {{- toYaml .Values.eventPublisher.resources | nindent 10 }}

@@ -4,20 +4,15 @@ server:
 spring:
   application:
     name: event-publisher
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      acks: all
-      retries: 3
 
 telephony:
   esl:
     outbound-host: 0.0.0.0
     outbound-port: 8084
-  kafka:
-    topic: ${KAFKA_TOPIC:telephony-call-events}
+  lead-service:
+    url: ${LEAD_SERVICE_URL:http://lead-service:8080}
+    max-retries: ${LEAD_SERVICE_MAX_RETRIES:3}
+    retry-delay-ms: ${LEAD_SERVICE_RETRY_DELAY_MS:1000}
 
 logging:
   level:

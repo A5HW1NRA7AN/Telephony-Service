@@ -41,10 +41,6 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: postgres-password
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          value: {{ .Values.kafka.bootstrapServers | quote }}
-        - name: KAFKA_ENABLED
-          value: {{ .Values.leadService.kafkaEnabled | quote }}
         - name: AMI_ENABLED
           value: "false"
         - name: LEAD_CONTEXT
