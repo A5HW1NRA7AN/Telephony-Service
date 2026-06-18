@@ -14,7 +14,6 @@ sequenceDiagram
     actor Twilio as Twilio Trunk
     participant FS as FreeSWITCH Pod<br/>(Private Subnet via Proxy DNAT)
     participant EP as Event-Publisher Pod<br/>(Spring Boot ESL)
-    participant Kafka as Strimzi Kafka Operator<br/>(telephony-cluster)
     participant LS as Lead-Service Pod<br/>(Spring Boot JVM)
     participant DB as PostgreSQL Pod<br/>(Persistent PVC)
     participant Registry as Lead Registry<br/>(External API)
@@ -23,10 +22,9 @@ sequenceDiagram
     Note over FS: Call processed (IVR options played/captured, hangup triggered)
     FS->>EP: Event Outbound Socket Connection (ESL on Port 8084)
     EP->>FS: Listen for CHANNEL_HANGUP & CHANNEL_HANGUP_COMPLETE
-    FS-->>EP: Emit call hangup event data
-    EP->>Kafka: Publish event to 'telephony-call-events' topic
-    LS->>Kafka: Consume event from topic
-    LS->>DB: Save raw event & insert/update telephony_call_lead_ingest_log
+    FS-->>EP: Emit call event data (START, ANSWER, HANGUP)
+    EP->>LS: POST /api/v1/call-events (REST)
+    LS->>DB: Save to call_event_log (ALL events) & telephony_call_lead_ingest_log (HANGUP only)
     Note over LS: Check lead context allowlist (e.g. public/from-missed-call)
     LS->>Registry: HTTP POST normalized lead to registry URL
     Registry-->>LS: HTTP 200 / Status Response
@@ -34,8 +32,8 @@ sequenceDiagram
 ```
 
 1. **FreeSWITCH Pod**: Listens on the host network for forwarded SIP/RTP traffic from the public proxy, plays the welcome greeting/IVR menus, and connects the ESL socket to Event-Publisher.
-2. **Event-Publisher**: Connects to the FreeSWITCH outbound socket, receives events, and publishes them to the Kafka broker.
-3. **Lead-Service**: Consumes call hangup events from Kafka, logs them to PostgreSQL, and posts the lead payload to the external lead registry.
+2. **Event-Publisher**: Connects to the FreeSWITCH outbound socket, receives call events, and forwards them to Lead-Service via REST API (`POST /api/v1/call-events`). Includes retry logic for resilience.
+3. **Lead-Service**: Receives call events via REST, logs ALL events to the `call_event_log` table for audit trail, and creates leads from HANGUP events by saving to `telephony_call_lead_ingest_log` and posting to the external registry.
 
 
 ---
@@ -49,11 +47,10 @@ sequenceDiagram
 │   ├── freeswitch/             # Raw FreeSWITCH configmaps and deployments
 │   ├── helm/                   # Helm packaging for the application stack
 │   │   └── telephony/          # Telephony Helm chart (Chart.yaml, values.yaml)
-│   ├── kafka/                  # Kafka cluster & topic definitions
 │   └── postgres/               # Postgres database and pgAdmin deployment
 ├── service/                    # Backend services source code
-│   ├── event-publisher/        # Spring Boot ESL event-to-Kafka publisher
-│   └── lead-service/           # Spring Boot Kafka-to-Registry lead ingestion service
+│   ├── event-publisher/        # Spring Boot ESL event publisher (REST-based)
+│   └── lead-service/           # Spring Boot lead ingestion & call event logging service
 ├── test/                       # Integration testing scripts
 │   └── integration/            # Test call and DB validation utilities
 ├── .gitignore                  # Git ignore rules for Java/Kubernetes

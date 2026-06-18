@@ -18,7 +18,6 @@ leadService:
       cpu: "1"
       memory: "512Mi"
   dbUrl: "jdbc:postgresql://postgres-service:5432/lead_db"
-  kafkaEnabled: "true"
   leadContext: "from-missed-call"
 
 eventPublisher:
@@ -34,6 +33,8 @@ eventPublisher:
     limits:
       cpu: "1"
       memory: "512Mi"
+  leadServiceUrl: "http://lead-service:8080"
+  maxRetries: 3
 
 freeswitch:
   replicaCount: 2
@@ -62,10 +63,6 @@ pgadmin:
   image: "dpage/pgadmin4:latest"
   email: "admin@admin.com"
   password: "admin"
-
-kafka:
-  bootstrapServers: "telephony-cluster-kafka-bootstrap:9092"
-  topic: "telephony-call-events"
 
 leadRegistry:
   url: "http://aa21eaac375b4493ca4a6431d5a180a6-33565e963dc9b6f8.elb.us-west-1.amazonaws.com/leads/v1/initiate"
