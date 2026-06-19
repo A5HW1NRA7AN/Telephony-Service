@@ -15,7 +15,6 @@ sequenceDiagram
     participant Proxy as Nginx/SIP Proxy<br/>(Public IP)
     participant FS as FreeSWITCH Engine<br/>(Private IP)
     participant EP as Event-Publisher<br/>(Spring Boot ESL)
-    participant Kafka as Kafka Broker
     participant LS as Lead-Service<br/>(Spring Boot JVM)
     participant DB as PostgreSQL Database
     participant Registry as Lead Registry<br/>(External API)
@@ -26,10 +25,9 @@ sequenceDiagram
     Note over FS: Call processed (greeting.wav played, hangup triggered)
     FS->>EP: Event Outbound Socket Connection (ESL on Port 8084)
     EP->>FS: Listen for CHANNEL_HANGUP & CHANNEL_HANGUP_COMPLETE
-    FS-->>EP: Emit call hangup event data
-    EP->>Kafka: Publish event to 'telephony-call-events' topic
-    LS->>Kafka: Consume event from topic
-    LS->>DB: Save raw event & insert/update telephony_call_lead_ingest_log
+    FS-->>EP: Emit call event data (START, ANSWER, HANGUP)
+    EP->>LS: POST /api/v1/call-events (REST)
+    LS->>DB: Save to call_event_log (ALL events) & telephony_call_lead_ingest_log (HANGUP only)
     Note over LS: Check lead context allowlist (e.g. public/from-missed-call)
     LS->>Registry: HTTP POST normalized lead to registry URL
     Registry-->>LS: HTTP 200 / Status Response
@@ -38,7 +36,7 @@ sequenceDiagram
 
 1. **Bastion Jump Host** (Public Subnet): Strictly handles secure SSH administration.
 2. **Nginx / SIP Proxy** (Public Subnet): Exposes HTTP default routes for reverse-proxying web consoles, and implements iptables DNAT rules to route SIP (5060) and RTP (16384-32768) traffic into the private subnet.
-3. **FreeSWITCH Host** (Private Subnet): Runs the core FreeSWITCH instance alongside PostgreSQL, pgAdmin, Kafka, Zookeeper, Event-Publisher, and Lead-Service in a host-network-bridged Docker Compose stack.
+3. **FreeSWITCH Host** (Private Subnet): Runs the core FreeSWITCH instance alongside PostgreSQL, pgAdmin, Event-Publisher, and Lead-Service in a host-network-bridged Docker Compose stack.
 
 ---
 
@@ -60,8 +58,8 @@ sequenceDiagram
 │   ├── security.tf             # Generates key pair and declares Security Groups
 │   └── variables.tf            # Configurable Terraform inputs
 ├── service/                    # Backend services source code
-│   ├── event-publisher/        # Spring Boot ESL event-to-Kafka publisher
-│   └── lead-service/           # Spring Boot Kafka-to-Registry lead ingestion service
+│   ├── event-publisher/        # Spring Boot ESL event publisher (REST-based)
+│   └── lead-service/           # Spring Boot lead ingestion & call event logging service
 ├── docker-compose.yml          # Runs backend services on the private host
 ├── .env.example                # Example environment file template
 ├── .gitignore                  # Git ignore rules for Java/Terraform
@@ -106,7 +104,7 @@ Once ECR build and deployment are completed, the Docker containers on the privat
 
 ## 4. Verification & Testing
 
-1. Check that all 7 containers are healthy on the private host:
+1. Check that all 5 containers are healthy on the private host:
    ```bash
    docker ps --format "table {{.Names}}\t{{.Status}}"
    ```
@@ -114,7 +112,7 @@ Once ECR build and deployment are completed, the Docker containers on the privat
    ```bash
    docker exec -it telephony-freeswitch fs_cli -p CluSt3r@Esl#2026!
    ```
-3. Make an inbound test call by dialing `+13613101995`. Verify the greeting sound plays and that the Event-Publisher receives the call, publishes it to Kafka, and the Ingestion Service posts it to the lead registry.
+3. Make an inbound test call by dialing `+13613101995`. Verify the greeting sound plays and that the Event-Publisher receives the call, forwards it to Lead-Service via REST, and the Ingestion Service posts it to the lead registry.
 4. Run the database query tool locally to verify that the lead has been successfully logged:
    ```bash
    ./run_db_query.sh
