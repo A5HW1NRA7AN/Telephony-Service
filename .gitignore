@@ -43,6 +43,7 @@ override.tf.json
 .DS_Store
 Thumbs.db
 *Zone.Identifier
+*.tar
 
 # --- Java ---
 *.class
