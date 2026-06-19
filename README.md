@@ -49,14 +49,10 @@ sequenceDiagram
 │       └── deploy.yml          # Tag-based ECR build and remote deploy workflow
 ├── config/                     # FreeSWITCH config files
 │   └── freeswitch.xml          # Core dialplan, modules, and Sofia settings
-├── infra/                      # Terraform & Deployment configurations
+├── infra/                      # Docker build and validation configurations
+│   ├── freeswitch/             # FreeSWITCH Docker build context
 │   ├── run_call.sh             # Triggers a local loopback call for testing
-│   ├── run_db_query.sh         # Queries the remote database
-│   ├── instances.tf            # Provisions EC2 instances and Nginx/NAT userdata
-│   ├── main.tf                 # VPC definition and provider settings
-│   ├── outputs.tf              # Outputs IPs and SSH commands
-│   ├── security.tf             # Generates key pair and declares Security Groups
-│   └── variables.tf            # Configurable Terraform inputs
+│   └── run_db_query.sh         # Queries the remote database
 ├── service/                    # Backend services source code
 │   ├── event-publisher/        # Spring Boot ESL event publisher (REST-based)
 │   └── lead-service/           # Spring Boot lead ingestion & call event logging service
@@ -70,24 +66,10 @@ sequenceDiagram
 
 ## 3. Deployment Steps
 
-### Step 1: Provision AWS Infrastructure via Terraform
-1. Navigate to the Terraform directory:
-   ```bash
-   cd infra
-   ```
-2. Initialize and apply the configurations:
-   ```bash
-   terraform init
-   ```
-3. Apply configurations to provision resources:
-   ```bash
-   terraform apply -auto-approve
-   ```
-4. Record the outputs:
-   - `proxy_public_ip` (Proxy Gateway Elastic IP)
-   - `bastion_public_ip` (SSH Jump Host)
-   - `freeswitch_private_ip` (Private Server IP)
-   - `freeswitch-key.pem` (Automatically generated private key)
+### Step 1: Provision AWS Infrastructure
+AWS infrastructure is provisioned from the separate **Infrastructure** repository. Follow the guide in that repository to:
+1. Provision the Bastion, Proxy, and Private application servers using Terraform.
+2. Obtain the generated private key (`freeswitch-key.pem`) and note the public/private IP addresses.
 
 ### Step 2: Configure Twilio Elastic SIP Trunking
 1. Set up a Twilio Elastic SIP Trunk pointing to your `proxy_public_ip` as the Origination URI:
