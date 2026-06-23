@@ -10,7 +10,7 @@ pipeline {
         EVENT_PUBLISHER_REPO = 'freeswitch-event-publisher-ec2'
         FREESWITCH_REPO      = 'freeswitch-freeswitch-ec2'
         
-        BASTION_IP          = '52.69.97.143'
+        BASTION_IP          = '13.112.221.231'
         PRIVATE_SERVER_IP   = '10.0.1.143'
         
         // Jenkins credentials IDs
