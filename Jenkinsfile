@@ -73,6 +73,12 @@ pipeline {
                         // 1. Get ECR login password
                         def ecrPassword = sh(script: "aws ecr get-login-password --region ${AWS_REGION}", returnStdout: true).trim()
                         
+                        // Copy SSH key to Bastion for tunneling
+                        sh """
+                            scp -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} \${SSH_KEY_FILE} ubuntu@\${BASTION_IP}:/home/ubuntu/.ssh/id_rsa
+                            ssh -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ubuntu@\${BASTION_IP} "chmod 600 /home/ubuntu/.ssh/id_rsa"
+                        """
+                        
                         // 2. Log in remote docker to ECR via Bastion tunnel
                         sh """
                             ssh -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ubuntu@\${BASTION_IP} \
