@@ -93,11 +93,17 @@ pipeline {
                                  'mkdir -p /home/ubuntu/freeswitch'"
                         """
                         
-                        // 4. Copy docker-compose.yml to the remote host
+                        // 4. Copy docker-compose.yml and config/freeswitch.xml to the remote host
                         sh """
                             scp -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} docker-compose.yml ubuntu@\${BASTION_IP}:/home/ubuntu/docker-compose.yml
                             ssh -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ubuntu@\${BASTION_IP} \
                                 "scp -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/id_rsa /home/ubuntu/docker-compose.yml ubuntu@\${PRIVATE_SERVER_IP}:/home/ubuntu/freeswitch/docker-compose.yml"
+                            
+                            ssh -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ubuntu@\${BASTION_IP} "mkdir -p /home/ubuntu/config"
+                            scp -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} config/freeswitch.xml ubuntu@\${BASTION_IP}:/home/ubuntu/config/freeswitch.xml
+                            ssh -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ubuntu@\${BASTION_IP} \
+                                "ssh -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/id_rsa ubuntu@\${PRIVATE_SERVER_IP} 'mkdir -p /home/ubuntu/freeswitch/config' && \
+                                 scp -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/id_rsa /home/ubuntu/config/freeswitch.xml ubuntu@\${PRIVATE_SERVER_IP}:/home/ubuntu/freeswitch/config/freeswitch.xml"
                         """
                         
                         // 5. Pull and recreate containers
