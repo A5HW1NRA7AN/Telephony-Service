@@ -64,7 +64,7 @@ services:
       DB_USER: ${POSTGRES_USER:-lead_user}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-lead_password}
       AMI_ENABLED: "false"
-      LEAD_CONTEXT: ${LEAD_CONTEXT:-from-missed-call}
+      LEAD_CONTEXT: ${LEAD_CONTEXT:-public,from-missed-call}
       LEAD_REGISTRY_URL: ${LEAD_REGISTRY_URL}
       LEAD_REGISTRY_API_KEY_HEADER: ${LEAD_REGISTRY_API_KEY_HEADER}
       LEAD_REGISTRY_API_KEY_VALUE: ${LEAD_REGISTRY_API_KEY_VALUE}
