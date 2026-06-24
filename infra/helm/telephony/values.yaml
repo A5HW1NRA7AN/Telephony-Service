@@ -18,7 +18,7 @@ leadService:
       cpu: "1"
       memory: "512Mi"
   dbUrl: "jdbc:postgresql://postgres-service:5432/lead_db"
-  leadContext: "from-missed-call"
+  leadContext: "public,from-missed-call"
 
 eventPublisher:
   replicaCount: 2
