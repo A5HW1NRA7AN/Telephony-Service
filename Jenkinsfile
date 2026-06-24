@@ -65,7 +65,13 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CRED_ID, variable: 'KUBECONFIG')]) {
                     sh """
-                        helm upgrade --install telephony ./infra/helm/telephony \
+                        if [ ! -f ./helm ]; then
+                            echo "==> Downloading Helm..."
+                            curl -sSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz
+                            mv linux-amd64/helm ./helm
+                            rm -rf linux-amd64
+                        fi
+                        ./helm upgrade --install telephony ./infra/helm/telephony \
                             --set global.registry=${ECR_REGISTRY} \
                             --set leadService.image.tag=${BUILD_NUMBER} \
                             --set eventPublisher.image.tag=${BUILD_NUMBER} \
