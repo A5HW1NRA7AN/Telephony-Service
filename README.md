@@ -1,10 +1,41 @@
-# FreeSWITCH Telephony System - Kubernetes Production Deployment
+# FreeSWITCH Telephony System - Production Deployments
 
-This branch contains the Kubernetes manifests, Helm packaging, and CI/CD configurations for running the FreeSWITCH telephony system on a production Kubernetes cluster. It is designed to scale horizontally and deploy all stateful and stateless components inside Kubernetes pods.
+This repository contains the application source code, Dockerfiles, Helm charts, and CI/CD configurations for the FreeSWITCH telephony lead generation platform. The codebase supports multiple operational flows and deployment architectures across distinct Git branches.
 
 ---
 
-## 1. Runtime Flow and Architecture
+## 1. Branch Strategy and Directory Layout
+
+To support different deployment environments and call flows, this repository is organized into three main branches:
+
+| Branch | Infrastructure / Deployment | Call Flow Style | Key Features & Directories |
+|:---|:---|:---|:---|
+| **`freeswitch`** | Standalone AWS EC2 Instances | Missed-Call Ingest | Built using Docker Compose. Deploy files in `deploy/` include standalone EC2 configs, Dockerfiles, and compose files. **No Kubernetes dependencies**. |
+| **`freeswitch-kubernetes`** | Kubernetes Cluster (Kubespray) | Missed-Call Ingest | Built using Helm. Deploy files in `deploy/` contain K8s manifests, Helm charts, and ECR auth settings. Sourced with `greeting.wav` only. |
+| **`freeswitch-ivr-kubernetes`** | Kubernetes Cluster (Kubespray) | Multilingual IVR | Built using Helm. Sourced with the complete set of IVR prompt files under `deploy/freeswitch/audio/`. |
+
+### Directory Structure (Kubernetes Branches)
+
+```
+.
+├── Jenkinsfile                 # Jenkins CI/CD declarative pipeline
+├── deploy/                     # Kubernetes deployment configurations (formerly infra/)
+│   ├── freeswitch/             # Raw FreeSWITCH Dockerfile, configmaps, and deployments
+│   ├── helm/                   # Helm packaging for the application stack
+│   │   └── telephony/          # Telephony Helm chart (Chart.yaml, values.yaml)
+│   └── postgres/               # Postgres database and pgAdmin deployment
+├── service/                    # Backend Spring Boot services source code
+│   ├── event-publisher/        # Spring Boot ESL event publisher (REST-based)
+│   └── lead-service/           # Spring Boot lead ingestion & call event logging service
+├── test/                       # Integration testing scripts
+│   └── integration/            # Test call and DB validation utilities
+├── .gitignore                  # Git ignore rules for Java/Kubernetes
+└── README.md                   # This architecture guide
+```
+
+---
+
+## 2. Runtime Flow and Architecture
 
 The sequence below details the call routing, event propagation, and ingestion pipeline inside the Kubernetes cluster:
 
@@ -36,50 +67,14 @@ sequenceDiagram
 3. **Lead-Service**: Receives call events via REST, logs ALL events to the `call_event_log` table for audit trail, and creates leads from HANGUP events by saving to `telephony_call_lead_ingest_log` and posting to the external registry.
 
 
----
+## 3. Packaging and Deploying via Helm
 
-## 2. Directory Structure
-
-```
-.
-├── Jenkinsfile                 # Jenkins CI/CD pipeline
-├── infra/                      # Kubernetes deployment configurations
-│   ├── freeswitch/             # Raw FreeSWITCH configmaps and deployments
-│   ├── helm/                   # Helm packaging for the application stack
-│   │   └── telephony/          # Telephony Helm chart (Chart.yaml, values.yaml)
-│   └── postgres/               # Postgres database and pgAdmin deployment
-├── service/                    # Backend services source code
-│   ├── event-publisher/        # Spring Boot ESL event publisher (REST-based)
-│   └── lead-service/           # Spring Boot lead ingestion & call event logging service
-├── test/                       # Integration testing scripts
-│   └── integration/            # Test call and DB validation utilities
-├── .gitignore                  # Git ignore rules for Java/Kubernetes
-└── README.md                   # This architecture guide
-```
-
----
-
-## 3. CI/CD Deployment with Jenkins
-
-We use a declarative Jenkins pipeline (`Jenkinsfile`) for automated testing and deployment.
-
-### Jenkins Pipeline Stages
-1. **Checkout**: Checks out the branch code from Git.
-2. **Build Java Artifacts**: Packages the Spring Boot applications using Maven.
-3. **Docker Build & Tag**: Builds the Docker images for `lead-service`, `event-publisher`, and `freeswitch`.
-4. **ECR Push**: Pushes the Docker images to your AWS ECR Registry.
-5. **Deploy to Kubernetes**: Runs `helm upgrade --install` to deploy the Helm chart to the cluster using the current build number tags.
-
----
-
-## 4. Packaging and Deploying via Helm
-
-We package the entire telephony stack into a single Helm chart located at `infra/helm/telephony`.
+We package the entire telephony stack into a single Helm chart located at `deploy/helm/telephony`.
 
 ### Deploying the Helm Chart
 To deploy the chart using your custom values:
 ```bash
-helm upgrade --install telephony ./infra/helm/telephony \
+helm upgrade --install telephony ./deploy/helm/telephony \
   --set global.registry="379220350808.dkr.ecr.ap-northeast-1.amazonaws.com" \
   --set leadService.image.tag="latest" \
   --set eventPublisher.image.tag="latest" \
