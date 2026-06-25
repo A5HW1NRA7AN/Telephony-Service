@@ -34,7 +34,7 @@ pipeline {
                 script {
                     sh "docker build -t ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:latest ./service/lead-service"
                     sh "docker build -t ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:latest ./service/event-publisher"
-                    sh "docker build -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:latest ./infra/freeswitch"
+                    sh "docker build -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:latest ./deploy/freeswitch"
                 }
             }
         }
@@ -63,7 +63,10 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([file(credentialsId: env.KUBECONFIG_CRED_ID, variable: 'KUBECONFIG')]) {
+                withCredentials([
+                    file(credentialsId: env.KUBECONFIG_CRED_ID, variable: 'KUBECONFIG'),
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: env.AWS_CREDENTIALS_ID, accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
+                ]) {
                     sh """
                         if [ ! -f ./helm ]; then
                             echo "==> Downloading Helm..."
@@ -71,12 +74,22 @@ pipeline {
                             mv linux-amd64/helm ./helm
                             rm -rf linux-amd64
                         fi
-                        ./helm upgrade --install telephony ./infra/helm/telephony \
-                            --set global.registry=${ECR_REGISTRY} \
-                            --set leadService.image.tag=${BUILD_NUMBER} \
-                            --set eventPublisher.image.tag=${BUILD_NUMBER} \
-                            --set freeswitch.image.tag=${BUILD_NUMBER} \
-                            --kubeconfig ${KUBECONFIG}
+                        
+                        echo "==> Refreshing ECR registry credentials secret (regcred)..."
+                        ECR_PASSWORD=\$(aws ecr get-login-password --region ${AWS_REGION})
+                        kubectl --kubeconfig \${KUBECONFIG} delete secret regcred --ignore-not-found
+                        kubectl --kubeconfig \${KUBECONFIG} create secret docker-registry regcred \\
+                            --docker-server=\${ECR_REGISTRY} \\
+                            --docker-username=AWS \\
+                            --docker-password="\${ECR_PASSWORD}"
+                        
+                        echo "==> Deploying applications via Helm..."
+                        ./helm upgrade --install telephony ./deploy/helm/telephony \\
+                            --set global.registry=\${ECR_REGISTRY} \\
+                            --set leadService.image.tag=${BUILD_NUMBER} \\
+                            --set eventPublisher.image.tag=${BUILD_NUMBER} \\
+                            --set freeswitch.image.tag=${BUILD_NUMBER} \\
+                            --kubeconfig \${KUBECONFIG}
                     """
                 }
             }
