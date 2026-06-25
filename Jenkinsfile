@@ -37,7 +37,7 @@ pipeline {
                 script {
                     sh "docker build -t ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${LEAD_SERVICE_REPO}:latest ./service/lead-service"
                     sh "docker build -t ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${EVENT_PUBLISHER_REPO}:latest ./service/event-publisher"
-                    sh "docker build -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:latest ./infra/freeswitch"
+                    sh "docker build -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:${BUILD_NUMBER} -t ${ECR_REGISTRY}/${FREESWITCH_REPO}:latest ./deploy/freeswitch"
                 }
             }
         }
@@ -95,12 +95,12 @@ pipeline {
                         
                         // 4. Copy docker-compose.yml and config/freeswitch.xml to the remote host
                         sh """
-                            scp -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} docker-compose.yml ubuntu@\${BASTION_IP}:/home/ubuntu/docker-compose.yml
+                            scp -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ./deploy/docker-compose.yml ubuntu@\${BASTION_IP}:/home/ubuntu/docker-compose.yml
                             ssh -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ubuntu@\${BASTION_IP} \
                                 "scp -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/id_rsa /home/ubuntu/docker-compose.yml ubuntu@\${PRIVATE_SERVER_IP}:/home/ubuntu/freeswitch/docker-compose.yml"
                             
                             ssh -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ubuntu@\${BASTION_IP} "mkdir -p /home/ubuntu/config"
-                            scp -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} config/freeswitch.xml ubuntu@\${BASTION_IP}:/home/ubuntu/config/freeswitch.xml
+                            scp -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ./deploy/config/freeswitch.xml ubuntu@\${BASTION_IP}:/home/ubuntu/config/freeswitch.xml
                             ssh -o StrictHostKeyChecking=no -i \${SSH_KEY_FILE} ubuntu@\${BASTION_IP} \
                                 "ssh -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/id_rsa ubuntu@\${PRIVATE_SERVER_IP} 'mkdir -p /home/ubuntu/freeswitch/config' && \
                                  scp -o StrictHostKeyChecking=no -i /home/ubuntu/.ssh/id_rsa /home/ubuntu/config/freeswitch.xml ubuntu@\${PRIVATE_SERVER_IP}:/home/ubuntu/freeswitch/config/freeswitch.xml"

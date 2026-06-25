@@ -4,7 +4,43 @@ This branch contains the deployment configuration and source code for running th
 
 ---
 
-## 1. Runtime Flow and Architecture
+## 1. Branch Strategy and Directory Layout
+
+To support different deployment environments and call flows, this repository is organized into three main branches:
+
+| Branch | Infrastructure / Deployment | Call Flow Style | Key Features & Directories |
+|:---|:---|:---|:---|
+| **`freeswitch`** | Standalone AWS EC2 Instances | Missed-Call Ingest | Built using Docker Compose. Deploy files in `deploy/` include standalone EC2 configs, Dockerfiles, and compose files. **No Kubernetes dependencies**. |
+| **`freeswitch-kubernetes`** | Kubernetes Cluster (Kubespray) | Missed-Call Ingest | Built using Helm. Deploy files in `deploy/` contain K8s manifests, Helm charts, and ECR auth settings. Sourced with `greeting.wav` only. |
+| **`freeswitch-ivr-kubernetes`** | Kubernetes Cluster (Kubespray) | Multilingual IVR | Built using Helm. Sourced with the complete set of IVR prompt files under `deploy/freeswitch/audio/`. |
+
+### Directory Structure (Standalone EC2 Branch)
+
+```
+.
+├── .github/                    # GitHub CI/CD Workflows (GitHub Actions)
+│   └── workflows/
+│       └── deploy.yml          # Tag-based ECR build and remote deploy workflow
+├── deploy/                     # Docker build and server deploy configurations (formerly infra/)
+│   ├── config/                 # FreeSWITCH config files
+│   │   └── freeswitch.xml      # Core dialplan, modules, and Sofia settings
+│   ├── freeswitch/             # FreeSWITCH Docker build context
+│   │   ├── Dockerfile          # FreeSWITCH container definition
+│   │   └── greeting.wav        # Greeting audio prompt
+│   ├── docker-compose.yml      # Runs backend services on the private host
+│   ├── run_call.sh             # Triggers a local loopback call for testing
+│   └── run_db_query.sh         # Queries the remote database
+├── service/                    # Backend services source code
+│   ├── event-publisher/        # Spring Boot ESL event publisher (REST-based)
+│   └── lead-service/           # Spring Boot lead ingestion & call event logging service
+├── .env.example                # Example environment file template
+├── .gitignore                  # Git ignore rules for Java/Terraform
+└── README.md                   # This architecture guide
+```
+
+---
+
+## 2. Runtime Flow and Architecture
 
 The sequence below details the flow of an inbound call, how events are parsed, and how leads are normalized and dispatched:
 
@@ -37,32 +73,6 @@ sequenceDiagram
 1. **Bastion Jump Host** (Public Subnet): Strictly handles secure SSH administration.
 2. **Nginx / SIP Proxy** (Public Subnet): Exposes HTTP default routes for reverse-proxying web consoles, and implements iptables DNAT rules to route SIP (5060) and RTP (16384-32768) traffic into the private subnet.
 3. **FreeSWITCH Host** (Private Subnet): Runs the core FreeSWITCH instance alongside PostgreSQL, pgAdmin, Event-Publisher, and Lead-Service in a host-network-bridged Docker Compose stack.
-
----
-
-## 2. Directory Structure
-
-```
-.
-├── .github/                    # GitHub CI/CD Workflows
-│   └── workflows/
-│       └── deploy.yml          # Tag-based ECR build and remote deploy workflow
-├── config/                     # FreeSWITCH config files
-│   └── freeswitch.xml          # Core dialplan, modules, and Sofia settings
-├── infra/                      # Docker build and validation configurations
-│   ├── freeswitch/             # FreeSWITCH Docker build context
-│   ├── run_call.sh             # Triggers a local loopback call for testing
-│   └── run_db_query.sh         # Queries the remote database
-├── service/                    # Backend services source code
-│   ├── event-publisher/        # Spring Boot ESL event publisher (REST-based)
-│   └── lead-service/           # Spring Boot lead ingestion & call event logging service
-├── docker-compose.yml          # Runs backend services on the private host
-├── .env.example                # Example environment file template
-├── .gitignore                  # Git ignore rules for Java/Terraform
-└── README.md                   # This architecture guide
-```
-
----
 
 ## 3. Deployment Steps
 
@@ -97,5 +107,5 @@ Once ECR build and deployment are completed, the Docker containers on the privat
 3. Make an inbound test call by dialing `+13613101995`. Verify the greeting sound plays and that the Event-Publisher receives the call, forwards it to Lead-Service via REST, and the Ingestion Service posts it to the lead registry.
 4. Run the database query tool locally to verify that the lead has been successfully logged:
    ```bash
-   ./run_db_query.sh
+   ./deploy/run_db_query.sh
    ```
