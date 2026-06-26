@@ -77,8 +77,8 @@ pipeline {
                         
                         echo "==> Refreshing ECR registry credentials secret (regcred)..."
                         ECR_PASSWORD=\$(aws ecr get-login-password --region ${AWS_REGION})
-                        kubectl --kubeconfig \${KUBECONFIG} delete secret regcred --ignore-not-found
-                        kubectl --kubeconfig \${KUBECONFIG} create secret docker-registry regcred \\
+                        /usr/local/bin/kubectl --kubeconfig \${KUBECONFIG} delete secret regcred --ignore-not-found
+                        /usr/local/bin/kubectl --kubeconfig \${KUBECONFIG} create secret docker-registry regcred \\
                             --docker-server=\${ECR_REGISTRY} \\
                             --docker-username=AWS \\
                             --docker-password="\${ECR_PASSWORD}"
