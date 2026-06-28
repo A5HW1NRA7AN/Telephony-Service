@@ -16,7 +16,5 @@ public class CallEventRequest {
     private String calledNumber;
     private String context;
     private String timestamp;
-    private String ivrSelection;
-    private String ivrLanguage;
     private Map<String, String> rawHeaders;
 }

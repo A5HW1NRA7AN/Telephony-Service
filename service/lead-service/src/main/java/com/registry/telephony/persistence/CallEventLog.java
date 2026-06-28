@@ -45,12 +45,6 @@ public class CallEventLog {
     @Column(name = "context", length = 64)
     private String context;
 
-    @Column(name = "ivr_selection", length = 32)
-    private String ivrSelection;
-
-    @Column(name = "ivr_language", length = 16)
-    private String ivrLanguage;
-
     @Type(JsonBinaryType.class)
     @Column(name = "raw_headers", columnDefinition = "jsonb")
     private JsonNode rawHeaders;

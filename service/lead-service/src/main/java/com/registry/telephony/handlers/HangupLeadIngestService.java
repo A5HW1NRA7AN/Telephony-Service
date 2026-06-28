@@ -55,11 +55,7 @@ public class HangupLeadIngestService {
         JsonNode raw = objectMapper.valueToTree(eventData);
         ObjectNode lead = buildLeadPayload(eventData, idempotencyKey);
 
-        String ivrSelection = eventData.getOrDefault("ivrSelection", "");
-        String ivrLanguage = eventData.getOrDefault("ivrLanguage", "");
-
-        log.info("Creating Lead Ingest Log for Call: {}. ivrSelection: {}, ivrLanguage: {}", 
-                uniqueId, ivrSelection, ivrLanguage);
+        log.info("Creating Lead Ingest Log for Call: {}", uniqueId);
 
         CallLeadIngestLog row = new CallLeadIngestLog();
         row.setCallUniqueId(uniqueId);
@@ -68,8 +64,6 @@ public class HangupLeadIngestService {
         row.setProcessingStatus(CallLeadProcessingStatus.RECEIVED);
         row.setRawEventSnapshot(raw);
         row.setNormalizedLeadPayload(lead);
-        row.setIvrSelection(ivrSelection);
-        row.setIvrLanguage(ivrLanguage);
         row.setCreatedAt(Instant.now());
         row.setUpdatedAt(Instant.now());
 
@@ -123,10 +117,6 @@ public class HangupLeadIngestService {
         n.put("callDurationSeconds", duration);
         n.put("callStatus", "MISSED");
         n.put("leadSource", LEAD_SOURCE);
-        
-        // Multilingual IVR Selection fields
-        n.put("ivrSelection", eventData.getOrDefault("ivrSelection", ""));
-        n.put("ivrLanguage", eventData.getOrDefault("ivrLanguage", ""));
         return n;
     }
 
