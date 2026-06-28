@@ -49,6 +49,7 @@ freeswitch:
     limits:
       cpu: "2"
       memory: "2Gi"
+  externalIp: "18.177.63.129"
 
 postgres:
   replicaCount: 1

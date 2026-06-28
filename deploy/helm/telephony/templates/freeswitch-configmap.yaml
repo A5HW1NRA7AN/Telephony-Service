@@ -85,8 +85,8 @@ data:
                 <param name="rtp-timer-name" value="soft"/>
                 <param name="rtp-ip" value="$${local_ip_v4}"/>
                 <param name="sip-ip" value="$${local_ip_v4}"/>
-                <param name="ext-rtp-ip" value="auto-nat"/>
-                <param name="ext-sip-ip" value="auto-nat"/>
+                <param name="ext-rtp-ip" value="{{ .Values.freeswitch.externalIp | default "auto-nat" }}"/>
+                <param name="ext-sip-ip" value="{{ .Values.freeswitch.externalIp | default "auto-nat" }}"/>
                 <param name="rtp-timeout-sec" value="300"/>
                 <param name="rtp-hold-timeout-sec" value="1800"/>
                 <param name="challenge-realm" value="auto_to_local"/>
