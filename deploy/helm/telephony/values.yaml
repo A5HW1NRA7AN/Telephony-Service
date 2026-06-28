@@ -37,7 +37,7 @@ eventPublisher:
   maxRetries: 3
 
 freeswitch:
-  replicaCount: 2
+  replicaCount: 1
   image:
     repository: "freeswitch-freeswitch"
     tag: "latest"
