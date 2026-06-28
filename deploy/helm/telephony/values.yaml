@@ -33,7 +33,7 @@ eventPublisher:
     limits:
       cpu: "1"
       memory: "512Mi"
-  leadServiceUrl: "http://lead-service:8080"
+  leadServiceUrl: "http://lead-service-service:8080"
   maxRetries: 3
 
 freeswitch:

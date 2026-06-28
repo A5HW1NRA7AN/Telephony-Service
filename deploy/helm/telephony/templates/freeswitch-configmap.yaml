@@ -107,7 +107,7 @@ data:
               <!-- Log call arrival -->
               <action application="log" data="INFO Incoming call from ${caller_id_number} to ${destination_number}"/>
               <!-- Play greeting baked in Docker image -->
-              <action application="playback" data="/usr/share/freeswitch/sounds/custom/greeting.mp3"/>
+              <action application="playback" data="/usr/share/freeswitch/sounds/custom/greeting.wav"/>
               <!-- Connect to Event Publisher via Outbound ESL socket -->
               <action application="socket" data="event-publisher-service.{{ .Release.Namespace }}.svc.cluster.local:8084 async full"/>
               <!-- Hangup the call if not already hung up by publisher -->
