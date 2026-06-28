@@ -4,8 +4,10 @@ metadata:
   name: pgadmin-service
   namespace: {{ .Release.Namespace }}
 spec:
+  type: NodePort
   ports:
   - port: 5050
     targetPort: 80
+    nodePort: 30050
   selector:
     app: pgadmin
