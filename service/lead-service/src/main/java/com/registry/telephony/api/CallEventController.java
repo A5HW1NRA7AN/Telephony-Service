@@ -73,8 +73,6 @@ public class CallEventController {
         log.setCallerNumber(request.getCallerNumber());
         log.setCalledNumber(request.getCalledNumber());
         log.setContext(request.getContext());
-        log.setIvrSelection(request.getIvrSelection());
-        log.setIvrLanguage(request.getIvrLanguage());
         log.setEventTimestamp(request.getTimestamp());
         log.setReceivedAt(Instant.now());
 
@@ -98,10 +96,6 @@ public class CallEventController {
         eventData.put("Linkedid", request.getUniqueId() != null ? request.getUniqueId() : "");
         eventData.put("CallerIDNum", request.getCallerNumber() != null ? request.getCallerNumber() : "");
         eventData.put("ConnectedLineNum", request.getCallerNumber() != null ? request.getCallerNumber() : "");
-
-        // IVR selection and language
-        eventData.put("ivrSelection", request.getIvrSelection() != null ? request.getIvrSelection() : "");
-        eventData.put("ivrLanguage", request.getIvrLanguage() != null ? request.getIvrLanguage() : "");
 
         // Destination number
         String called = request.getCalledNumber();
