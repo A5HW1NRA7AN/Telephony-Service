@@ -7,6 +7,8 @@ metadata:
     app: freeswitch
 spec:
   replicas: {{ .Values.freeswitch.replicaCount }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: freeswitch
