@@ -1,85 +1,74 @@
-# 🌟 Telephony Engines Sandbox
+# FreeSWITCH Telephony Service Sandbox
 
-An enterprise-grade telephony infrastructure playground containing isolated branch architectures for the **FreeSWITCH** engine. This repository serves as a blueprint to connect incoming SIP trunk calls, handle interactive media streams, capture call events, and integrate real-time lead ingestion pipelines.
+This repository contains the deployment blueprints, configurations, and application source code for the FreeSWITCH-based lead ingestion platform. The codebase supports standalone virtual machine orchestrations as well as cloud-native Kubernetes deployments.
 
-To keep the codebase modular, clean, and optimized, the code is separated into **dedicated branches**. The `main` branch serves solely as a landing page and branch map.
+To maintain modularity and isolation across different environments, all source code and deployment manifests reside in dedicated branches. The main branch serves strictly as a landing page and branch navigation index.
 
 ---
 
-## 🗺️ Telephony Engine Branches
+## Repository Branch Mapping
 
-| Branch | Infrastructure | Telephony Engine | Event Handling / Integration | Key Use Cases |
+| Branch | Target Environment | Deployment Orchestration | Call Ingestion Type | Key Features |
 | :--- | :--- | :--- | :--- | :--- |
-| **[freeswitch](https://github.com/A5HW1NRA7AN/Telephony-Service/tree/freeswitch)** | Standalone AWS EC2 | FreeSWITCH (Dockerized) | Java Outbound ESL Service ➜ REST ➜ Java Lead Service | High-throughput standalone SIP trunking, scalable routing, decoupled event architecture. |
-| **[freeswitch-kubernetes](https://github.com/A5HW1NRA7AN/Telephony-Service/tree/freeswitch-kubernetes)** | Cloud-Native AWS EKS | FreeSWITCH (StatefulSet) | Java Outbound ESL Service ➜ REST ➜ Java Lead Service | Production-scale Kubernetes clustering, containerized deployment, and autoscaling. |
-| **[freeswitch-ivr-kubernetes](https://github.com/A5HW1NRA7AN/Telephony-Service/tree/freeswitch-ivr-kubernetes)** | Cloud-Native AWS EKS | FreeSWITCH (StatefulSet) | Java Outbound ESL Service ➜ REST ➜ Java Lead Service | Cloud-native Kubernetes clustering with support for multilingual IVR prompts and selection capturing. |
+| **[freeswitch](https://github.com/A5HW1NRA7AN/Telephony-Service/tree/freeswitch)** | Standalone AWS EC2 VM | Docker Compose | Missed-Call | Outbound ESL publisher routing call events directly to the Lead Service via REST API. |
+| **[freeswitch-kubernetes](https://github.com/A5HW1NRA7AN/Telephony-Service/tree/freeswitch-kubernetes)** | Kubernetes Cluster (EKS/Kubespray) | Helm Chart | Missed-Call | Clustered FreeSWITCH StatefluSet deployments utilizing hostNetwork port mapping. |
+| **[freeswitch-ivr-kubernetes](https://github.com/A5HW1NRA7AN/Telephony-Service/tree/freeswitch-ivr-kubernetes)** | Kubernetes Cluster (EKS/Kubespray) | Helm Chart | Multilingual IVR | Extends the K8s missed-call stack to support interactive voice menus and DTMF capturing. |
 
 ---
 
-## 🏗️ Telephony Architectures
+## Technical Architecture
 
-Here is a high-level representation of how each engine operates and integrates with downstream ingestion services:
+The following diagram illustrates the horizontal propagation of call signaling, event streams, and database transactions:
 
 ```mermaid
-flowchart TD
-    classDef branch fill:#f9f9f9,stroke:#333,stroke-width:1px;
-    classDef nodeStyle fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px;
-    classDef dbStyle fill:#e8f5e9,stroke:#2e7d32,stroke-width:1.5px;
+flowchart LR
+    classDef comp fill:#f5f5f7,stroke:#1d1d1f,stroke-width:1px;
+    classDef database fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px;
 
-    subgraph FreeSwitchFlow ["FreeSWITCH Branches Flow (EC2 & Kubernetes)"]
-        F[Caller] -->|Twilio SIP Trunk| G[FreeSWITCH Server]:::nodeStyle
-        G -->|Outbound ESL Connection| H[Java ESL Event Publisher]:::nodeStyle
-        H -->|REST POST Event| J[Java Lead Service]:::nodeStyle
-        J -->|Save Record| K[(Postgres Database)]:::dbStyle
-        J -->|POST Payload| L[External Lead Registry]:::nodeStyle
-    end
-    
-    style FreeSwitchFlow fill:#ede7f6,stroke:#7e57c2,stroke-width:1px
+    SIP[Twilio SIP Trunk] -->|Signaling & Media| FS[FreeSWITCH Engine]:::comp
+    FS -->|Outbound ESL Connection| EP[ESL Event Publisher]:::comp
+    EP -->|REST HTTP POST| LS[Lead Service]:::comp
+    LS -->|JDBC SQL Write| DB[(PostgreSQL Database)]:::database
+    LS -->|REST HTTP POST| REG[External Lead Registry]:::comp
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
-To explore or deploy one of the telephony setups, you must switch to the appropriate branch:
+To explore, run, or deploy the telephony stacks, check out the specific branch matching your target environment:
 
-### 1. FreeSWITCH Standalone EC2 Setup
-This branch uses FreeSWITCH inside docker-compose on an AWS EC2 instance. It features a decoupled REST event architecture via a lightweight ESL (Event Socket Library) outbound server.
+### 1. Standalone EC2 Deployment
+This setup is designed for running on a single virtual machine using Docker Compose.
 ```bash
-# Checkout the FreeSWITCH branch
 git checkout freeswitch
 ```
-> [!NOTE]
-> Read the FreeSWITCH [README.md](https://github.com/A5HW1NRA7AN/Telephony-Service/blob/freeswitch/README.md) for details on provisioning via Terraform, configuring XML Dialplans, launching the ESL outbound socket publisher, and setting up the local multi-container development environment.
+Refer to the [freeswitch README](https://github.com/A5HW1NRA7AN/Telephony-Service/blob/freeswitch/README.md) for instructions on Terraform environment provisioning, dialplan configurations, and Docker Compose initialization.
 
 ---
 
-### 2. FreeSWITCH Kubernetes Setup
-This branch is identical to the FreeSWITCH Standalone architecture, but containerized for scalable deployments on AWS EKS using Helm/Kubernetes manifests.
+### 2. Kubernetes missed-call Deployment
+This setup is designed for scaling containerized deployments using Helm.
 ```bash
-# Checkout the FreeSWITCH Kubernetes branch
 git checkout freeswitch-kubernetes
 ```
-> [!NOTE]
-> Check out the Kubernetes [README.md](https://github.com/A5HW1NRA7AN/Telephony-Service/blob/freeswitch-kubernetes/README.md) to understand StatefulSet configurations, port forwarding, and EKS deployments.
+Refer to the [freeswitch-kubernetes README](https://github.com/A5HW1NRA7AN/Telephony-Service/blob/freeswitch-kubernetes/README.md) for EKS / Kubespray deployment guides, values.yaml configurations, and container build steps.
 
 ---
 
-### 3. FreeSWITCH Kubernetes Multilingual IVR Setup
-This branch builds on the Kubernetes deployment to implement a multilingual IVR (Interactive Voice Response) lead generation system instead of the regular missed-call ingestion.
+### 3. Kubernetes Multilingual IVR Deployment
+This setup adds an interactive voice menu flow to the Kubernetes deployment.
 ```bash
-# Checkout the FreeSWITCH IVR branch
 git checkout freeswitch-ivr-kubernetes
 ```
-> [!NOTE]
-> Read the IVR [README.md](https://github.com/A5HW1NRA7AN/Telephony-Service/blob/freeswitch-ivr-kubernetes/README.md) for details on the multilingual audio prompt layout, IVR selection mapping, and deployment.
+Refer to the [freeswitch-ivr-kubernetes README](https://github.com/A5HW1NRA7AN/Telephony-Service/blob/freeswitch-ivr-kubernetes/README.md) for dialplan XML mapping, custom greeting wave files, and IVR menu configurations.
 
 ---
 
-## ⚠️ Branch Isolation Rules
+## Repository Governance
 
-To keep this multi-engine sandbox clean and maintainable, please follow these guidelines:
+To ensure the integrity of the sandbox environment, developers must adhere to the following rules:
 
-1. **No Code on `main`**: All configurations, services, source code, and infrastructure templates should only live in their respective branches.
-2. **Strict Scope**: Keep Asterisk configurations completely out of the FreeSWITCH branches and vice versa.
-3. **Sensitive Data**: Never commit `.env` files, `.terraform/` caches, private keys (`*.pem`), or other credential files. Always use `.env.example` templates for onboarding.
+1. **Branch Isolation**: Do not commit application code, Helm charts, or configuration files directly to the `main` branch. 
+2. **Local Environment Templates**: Do not commit secrets, private key files (`.pem`), active `.env` configuration files, or local Terraform states. Use the provided `.env.example` templates.
+3. **Branch Specific Scope**: Keep configurations strictly isolated. Do not merge Kubernetes deployment manifests into the standalone EC2 branch.
