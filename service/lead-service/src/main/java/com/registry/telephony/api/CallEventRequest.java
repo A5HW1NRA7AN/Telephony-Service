@@ -1,6 +1,5 @@
 package com.registry.telephony.api;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Map;
 import lombok.Data;
 
@@ -9,7 +8,6 @@ import lombok.Data;
  * Matches the payload structure sent by EslOutboundServer.
  */
 @Data
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class CallEventRequest {
 
     private String eventType;
