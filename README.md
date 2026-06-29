@@ -11,8 +11,9 @@ To keep the codebase modular, clean, and optimized, the code is separated into *
 | Branch | Infrastructure | Telephony Engine | Event Handling / Integration | Key Use Cases |
 | :--- | :--- | :--- | :--- | :--- |
 | **[asterisk](https://github.com/A5HW1NRA7AN/Telephony/tree/asterisk)** | Standalone AWS EC2 | Asterisk / FreePBX | Java Spring Boot AMI client listening to AMI `Hangup` events | Legacy-to-cloud PBX, SMB telephony, GUI-driven dialplan administration. |
-| **[freeswitch](https://github.com/A5HW1NRA7AN/Telephony/tree/freeswitch)** | Standalone AWS EC2 | FreeSWITCH (Dockerized) | Java Outbound ESL Service -> Kafka Broker -> Java Lead Service | High-throughput SIP trunking, scalable routing, decoupled event architecture. |
-| **[freeswitch-kubernetes](https://github.com/A5HW1NRA7AN/Telephony/tree/freeswitch-kubernetes)** | Cloud-Native AWS EKS | FreeSWITCH (StatefulSet) | Java Outbound ESL Service -> Kafka Broker -> Java Lead Service | Production-scale Kubernetes clustering, containerized deployment, and autoscaling. |
+| **[freeswitch](https://github.com/A5HW1NRA7AN/Telephony/tree/freeswitch)** | Standalone AWS EC2 | FreeSWITCH (Dockerized) | Java Outbound ESL Service ➜ REST ➜ Java Lead Service | High-throughput standalone SIP trunking, scalable routing, decoupled event architecture. |
+| **[freeswitch-kubernetes](https://github.com/A5HW1NRA7AN/Telephony/tree/freeswitch-kubernetes)** | Cloud-Native AWS EKS | FreeSWITCH (StatefulSet) | Java Outbound ESL Service ➜ REST ➜ Java Lead Service | Production-scale Kubernetes clustering, containerized deployment, and autoscaling. |
+| **[freeswitch-ivr-kubernetes](https://github.com/A5HW1NRA7AN/Telephony/tree/freeswitch-ivr-kubernetes)** | Cloud-Native AWS EKS | FreeSWITCH (StatefulSet) | Java Outbound ESL Service ➜ REST ➜ Java Lead Service | Cloud-native Kubernetes clustering with support for multilingual IVR prompts and selection capturing. |
 
 ---
 
@@ -36,8 +37,7 @@ flowchart TD
     subgraph FreeSwitchFlow ["FreeSWITCH Branches Flow (EC2 & Kubernetes)"]
         F[Caller] -->|Twilio SIP Trunk| G[FreeSWITCH Server]:::nodeStyle
         G -->|Outbound ESL Connection| H[Java ESL Event Publisher]:::nodeStyle
-        H -->|Publish Event| I[Kafka Broker]:::nodeStyle
-        I -->|Consume Event| J[Java Lead Service]:::nodeStyle
+        H -->|REST POST Event| J[Java Lead Service]:::nodeStyle
         J -->|Save Record| K[(Postgres Database)]:::dbStyle
         J -->|POST Payload| L[External Lead Registry]:::nodeStyle
     end
@@ -64,7 +64,7 @@ git checkout asterisk
 ---
 
 ### 2. FreeSWITCH Standalone EC2 Setup
-This branch uses FreeSWITCH inside docker-compose on an AWS EC2 instance. It features a fully decoupled event-driven architecture using Apache Kafka and an ESL (Event Socket Library) outbound server.
+This branch uses FreeSWITCH inside docker-compose on an AWS EC2 instance. It features a decoupled REST event architecture via a lightweight ESL (Event Socket Library) outbound server.
 ```bash
 # Checkout the FreeSWITCH branch
 git checkout freeswitch
@@ -82,6 +82,17 @@ git checkout freeswitch-kubernetes
 ```
 > [!NOTE]
 > Check out the Kubernetes [README.md](https://github.com/A5HW1NRA7AN/Telephony/blob/freeswitch-kubernetes/README.md) to understand StatefulSet configurations, port forwarding, and EKS deployments.
+
+---
+
+### 4. FreeSWITCH Kubernetes Multilingual IVR Setup
+This branch builds on the Kubernetes deployment to implement a multilingual IVR (Interactive Voice Response) lead generation system instead of the regular missed-call ingestion.
+```bash
+# Checkout the FreeSWITCH IVR branch
+git checkout freeswitch-ivr-kubernetes
+```
+> [!NOTE]
+> Read the IVR [README.md](https://github.com/A5HW1NRA7AN/Telephony/blob/freeswitch-ivr-kubernetes/README.md) for details on the multilingual audio prompt layout, IVR selection mapping, and deployment.
 
 ---
 
