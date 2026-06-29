@@ -169,16 +169,9 @@ public class EslOutboundServer {
                 payload.put("context", context);
                 payload.put("timestamp", Instant.now().toString());
 
-                // Extract IVR results set by FreeSWITCH dialplan (empty on non-IVR branches)
-                String ivrSelection = headers.get("variable_ivr_result");
-                String ivrLanguage = headers.get("variable_ivr_lang");
-                payload.put("ivrSelection", ivrSelection != null ? ivrSelection : "");
-                payload.put("ivrLanguage", ivrLanguage != null ? ivrLanguage : "");
-
                 payload.put("rawHeaders", headers);
 
-                log.info("Publishing event {} to lead-service for Call: {}. ivrSelection: {}, ivrLanguage: {}",
-                        eventType, uniqueId, ivrSelection, ivrLanguage);
+                log.info("Publishing event {} to lead-service for Call: {}", eventType, uniqueId);
 
                 String json = objectMapper.writeValueAsString(payload);
                 postWithRetry(json);
