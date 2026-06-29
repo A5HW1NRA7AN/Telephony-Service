@@ -27,8 +27,6 @@ To support different deployment environments and call flows, this repository is 
 ├── service/                    # Backend Spring Boot services source code
 │   ├── event-publisher/        # Spring Boot ESL event publisher (REST-based)
 │   └── lead-service/           # Spring Boot lead ingestion & call event logging service
-├── test/                       # Integration testing scripts
-│   └── integration/            # Test call and DB validation utilities
 ├── .gitignore                  # Git ignore rules for Java/Kubernetes
 └── README.md                   # This architecture guide
 ```
